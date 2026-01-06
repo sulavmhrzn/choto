@@ -1,16 +1,18 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/lmittmann/tint"
 	"github.com/sulavmhrzn/choto/internal/config"
 	"github.com/sulavmhrzn/choto/internal/handlers"
-	"github.com/sulavmhrzn/choto/internal/middleware"
 	"github.com/sulavmhrzn/choto/internal/repository"
 	"github.com/sulavmhrzn/choto/internal/service"
 	"github.com/sulavmhrzn/choto/internal/storage"
@@ -40,18 +42,38 @@ func main() {
 
 	urlRepo := repository.NewURLRepository(db, rdb, cfg)
 	urlService := service.NewURLService(urlRepo)
-	h := handlers.NewHandler(logger, cfg, startTime, urlService, rdb)
+	handlers := handlers.NewHandler(logger, cfg, startTime, urlService, rdb)
 
-	r := gin.Default()
-	r.GET("/ping", h.Ping)
-	protected := r.Group("/")
-	protected.Use(middleware.RateLimiter(rdb, cfg.RateLimitCount, time.Minute))
-	{
-		protected.POST("/shorten", h.Shorten)
+	router := NewRouter(rdb, handlers, cfg)
+
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%s", cfg.ServerPort),
+		Handler: router,
 	}
 
-	r.GET("/:code", h.Redirect)
-	r.GET("/stats/:code", h.GetStats)
+	go func() {
+		logger.Info("Server starting", "port", cfg.ServerPort)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("listen failed", "err", err)
+			os.Exit(1)
+		}
+	}()
 
-	r.Run(fmt.Sprintf(":%s", cfg.ServerPort))
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	logger.Info("Shutdown signal received")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		logger.Error("failed to shutdown", "err", err)
+		os.Exit(1)
+	}
+	logger.Info("Closing database and redis connections...")
+	db.Close()
+	rdb.Close()
+	logger.Info("Server exited gracefully")
+
 }

@@ -60,7 +60,7 @@ Prerequisites:
 - [ ] Custom slug support
 - [ ] URL expiration dates
 - [ ] User authentication and dashboard
-- [ ] Graceful Shutdown
+- [x] Graceful Shutdown
 - [ ] Prometheus metrics and structured JSON logging.
 - [ ] Use Redis to cache "hot" URLs and reduce DB load.
 - [ ] Integrated Swagger/OpenAPI UI.
