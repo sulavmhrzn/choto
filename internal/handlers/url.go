@@ -47,5 +47,20 @@ func (h *Handler) Redirect(c *gin.Context) {
 		}
 		return
 	}
+	h.URLService.TrackClick(code)
 	c.Redirect(http.StatusFound, longURL)
+}
+
+func (h *Handler) GetStats(c *gin.Context) {
+	code := c.Param("code")
+	stats, err := h.URLService.GetStats(c.Request.Context(), code)
+	if err != nil {
+		if errors.Is(err, service.ErrURLNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Short link not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+	c.JSON(http.StatusOK, stats)
 }

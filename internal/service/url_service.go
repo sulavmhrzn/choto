@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/url"
 	"slices"
 
@@ -20,11 +21,15 @@ var (
 type Shortener interface {
 	Shorten(ctx context.Context, longURL string) (string, error)
 	GetOriginalURL(ctx context.Context, code string) (string, error)
+	GetStats(ctx context.Context, code string) (*repository.URLStats, error)
+	TrackClick(code string)
 }
 
 type URLRepository interface {
 	Create(ctx context.Context, longURL string) (string, error)
 	GetByCode(ctx context.Context, code string) (string, error)
+	IncrementClick(code string) error
+	GetStats(ctx context.Context, code string) (*repository.URLStats, error)
 }
 
 type URLService struct {
@@ -64,4 +69,28 @@ func (s *URLService) GetOriginalURL(ctx context.Context, code string) (string, e
 		return "", ErrURLNotFound
 	}
 	return longURL, nil
+}
+
+func (s *URLService) TrackClick(code string) {
+	go func() {
+		err := s.repo.IncrementClick(code)
+		if err != nil {
+			log.Printf("could not increment click for %s: %v", code, err)
+		}
+	}()
+}
+
+func (s *URLService) GetStats(ctx context.Context, code string) (*repository.URLStats, error) {
+	if code == "" {
+		return nil, ErrShortCodeRequired
+	}
+	stats, err := s.repo.GetStats(ctx, code)
+	if err != nil {
+		if errors.Is(err, repository.ErrNoRows) {
+			return nil, ErrURLNotFound
+		}
+		return nil, fmt.Errorf("failed to get stats: %w", err)
+	}
+	return stats, nil
+
 }

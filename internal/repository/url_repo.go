@@ -79,3 +79,38 @@ func (r *URLRepository) GetByCode(ctx context.Context, code string) (string, err
 	_ = r.rdb.Set(ctx, code, longURL, 24*time.Hour)
 	return longURL, nil
 }
+
+func (r *URLRepository) IncrementClick(code string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	query := `UPDATE urls SET clicks = clicks + 1 WHERE short_code = $1`
+	_, err := r.db.ExecContext(ctx, query, code)
+	return err
+}
+
+type URLStats struct {
+	LongURL   string    `json:"long_url"`
+	ShortCode string    `json:"short_code"`
+	Clicks    int       `json:"clicks"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func (r *URLRepository) GetStats(ctx context.Context, code string) (*URLStats, error) {
+	query := `SELECT long_url, short_code, clicks, created_at FROM urls WHERE short_code = $1`
+
+	var stats URLStats
+	err := r.db.QueryRowContext(ctx, query, code).Scan(
+		&stats.LongURL,
+		&stats.ShortCode,
+		&stats.Clicks,
+		&stats.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoRows
+		}
+		return nil, err
+	}
+	return &stats, nil
+}

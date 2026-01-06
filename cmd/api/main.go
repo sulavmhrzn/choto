@@ -45,6 +45,7 @@ func main() {
 	r.GET("/ping", h.Ping)
 	r.POST("/shorten", h.Shorten)
 	r.GET("/:code", h.Redirect)
+	r.GET("/stats/:code", h.GetStats)
 
 	r.Run(fmt.Sprintf(":%s", cfg.ServerPort))
 }
