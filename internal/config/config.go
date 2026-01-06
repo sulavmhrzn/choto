@@ -8,12 +8,13 @@ import (
 )
 
 type Config struct {
-	Env        string `mapstructure:"ENV" validate:"required"`
-	ServerPort string `mapstructure:"SERVER_PORT" validate:"required,numeric"`
-	DBConn     string `mapstructure:"DB_CONN" validate:"required"`
-	RedisAddr  string `mapstructure:"REDIS_ADDR" validate:"required"`
-	SecretKey  string `mapstructure:"SECRET_KEY" validate:"required"`
-	BaseURL    string `mapstructure:"BASE_URL" validate:"required"`
+	Env            string `mapstructure:"ENV" validate:"required"`
+	ServerPort     string `mapstructure:"SERVER_PORT" validate:"required,numeric"`
+	DBConn         string `mapstructure:"DB_CONN" validate:"required"`
+	RedisAddr      string `mapstructure:"REDIS_ADDR" validate:"required"`
+	SecretKey      string `mapstructure:"SECRET_KEY" validate:"required"`
+	BaseURL        string `mapstructure:"BASE_URL" validate:"required"`
+	RateLimitCount int    `mapstructure:"RATE_LIMIT_COUNT" validate:"required,numeric"`
 }
 
 func LoadConfig() (*Config, error) {

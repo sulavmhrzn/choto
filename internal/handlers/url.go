@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sulavmhrzn/choto/internal/service"
@@ -25,6 +26,12 @@ func (h *Handler) Shorten(c *gin.Context) {
 		h.Logger.Error("failed to shorted", "err", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
+	}
+	val, exists := c.Get("rate_limit_count")
+	if exists {
+		count := val.(int64)
+		c.Header("X-RateLimit-Limit", strconv.FormatInt(int64(h.Config.RateLimitCount), 10))
+		c.Header("X-RateLimit-Remaining", strconv.FormatInt(int64(h.Config.RateLimitCount)-count, 10))
 	}
 	c.JSON(http.StatusCreated, gin.H{
 		"short_code": code,

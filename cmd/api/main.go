@@ -10,6 +10,7 @@ import (
 	"github.com/lmittmann/tint"
 	"github.com/sulavmhrzn/choto/internal/config"
 	"github.com/sulavmhrzn/choto/internal/handlers"
+	"github.com/sulavmhrzn/choto/internal/middleware"
 	"github.com/sulavmhrzn/choto/internal/repository"
 	"github.com/sulavmhrzn/choto/internal/service"
 	"github.com/sulavmhrzn/choto/internal/storage"
@@ -39,11 +40,16 @@ func main() {
 
 	urlRepo := repository.NewURLRepository(db, rdb, cfg)
 	urlService := service.NewURLService(urlRepo)
-	h := handlers.NewHandler(logger, cfg, startTime, urlService)
+	h := handlers.NewHandler(logger, cfg, startTime, urlService, rdb)
 
 	r := gin.Default()
 	r.GET("/ping", h.Ping)
-	r.POST("/shorten", h.Shorten)
+	protected := r.Group("/")
+	protected.Use(middleware.RateLimiter(rdb, cfg.RateLimitCount, time.Minute))
+	{
+		protected.POST("/shorten", h.Shorten)
+	}
+
 	r.GET("/:code", h.Redirect)
 	r.GET("/stats/:code", h.GetStats)
 
