@@ -10,6 +10,8 @@ import (
 	"github.com/lmittmann/tint"
 	"github.com/sulavmhrzn/choto/internal/config"
 	"github.com/sulavmhrzn/choto/internal/handlers"
+	"github.com/sulavmhrzn/choto/internal/repository"
+	"github.com/sulavmhrzn/choto/internal/service"
 	"github.com/sulavmhrzn/choto/internal/storage"
 )
 
@@ -23,16 +25,26 @@ func main() {
 		os.Exit(1)
 	}
 
-	h := handlers.NewHandler(logger, cfg, startTime)
-
-	_, err = storage.NewPostgres(cfg.DBConn)
+	db, err := storage.NewPostgres(cfg.DBConn)
 	if err != nil {
 		logger.Error("failed to connect to the database", "err", err)
 		os.Exit(1)
 	}
 
+	rdb, err := storage.NewRedis(cfg.RedisAddr)
+	if err != nil {
+		logger.Error("failed to connect to redis client", "err", err)
+		os.Exit(1)
+	}
+
+	urlRepo := repository.NewURLRepository(db, rdb, cfg)
+	urlService := service.NewURLService(urlRepo)
+	h := handlers.NewHandler(logger, cfg, startTime, urlService)
+
 	r := gin.Default()
 	r.GET("/ping", h.Ping)
+	r.POST("/shorten", h.Shorten)
+	r.GET("/:code", h.Redirect)
 
 	r.Run(fmt.Sprintf(":%s", cfg.ServerPort))
 }

@@ -13,6 +13,7 @@ type Config struct {
 	DBConn     string `mapstructure:"DB_CONN" validate:"required"`
 	RedisAddr  string `mapstructure:"REDIS_ADDR" validate:"required"`
 	SecretKey  string `mapstructure:"SECRET_KEY" validate:"required"`
+	BaseURL    string `mapstructure:"BASE_URL" validate:"required"`
 }
 
 func LoadConfig() (*Config, error) {
