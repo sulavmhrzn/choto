@@ -15,9 +15,9 @@ type MockRepository struct {
 	mock.Mock
 }
 
-func (m *MockRepository) Create(ctx context.Context, longURL string) (string, error) {
+func (m *MockRepository) Create(ctx context.Context, longURL string, expiresAt *time.Time) (*repository.URL, error) {
 	args := m.Called(ctx, longURL)
-	return args.String(0), args.Error(1)
+	return args.Get(0).(*repository.URL), args.Error(1)
 }
 
 func (m *MockRepository) GetByCode(ctx context.Context, code string) (string, error) {
@@ -43,7 +43,7 @@ func TestURLService_Shorten(t *testing.T) {
 	svc := NewURLService(mockRepo)
 
 	mockRepo.On("Create", mock.Anything, "https://google.com").Return("abc123", nil)
-	code, err := svc.Shorten(context.Background(), "https://google.com")
+	code, err := svc.Shorten(context.Background(), "https://google.com", nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "abc123", code)
@@ -54,7 +54,7 @@ func TestURLService_Shorten_InvalidURL(t *testing.T) {
 	mockRepo := new(MockRepository)
 	svc := NewURLService(mockRepo)
 
-	code, err := svc.Shorten(context.Background(), "not-a-url")
+	code, err := svc.Shorten(context.Background(), "not-a-url", nil)
 
 	assert.Error(t, err)
 	assert.Empty(t, code)
@@ -64,7 +64,7 @@ func TestURLService_Shorten_InvalidSchema(t *testing.T) {
 	mockRepo := new(MockRepository)
 	svc := NewURLService(mockRepo)
 
-	code, err := svc.Shorten(context.Background(), "ftp://something.com")
+	code, err := svc.Shorten(context.Background(), "ftp://something.com", nil)
 
 	assert.Error(t, err)
 	assert.Empty(t, code)

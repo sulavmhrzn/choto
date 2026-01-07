@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/url"
 	"slices"
+	"time"
 
 	"github.com/sulavmhrzn/choto/internal/repository"
 )
@@ -19,14 +20,14 @@ var (
 )
 
 type Shortener interface {
-	Shorten(ctx context.Context, longURL string) (string, error)
+	Shorten(ctx context.Context, longURL string, expiresAt *time.Time) (*repository.URL, error)
 	GetOriginalURL(ctx context.Context, code string) (string, error)
 	GetStats(ctx context.Context, code string) (*repository.URLStats, error)
 	TrackClick(code string)
 }
 
 type URLRepository interface {
-	Create(ctx context.Context, longURL string) (string, error)
+	Create(ctx context.Context, longURL string, expiresAt *time.Time) (*repository.URL, error)
 	GetByCode(ctx context.Context, code string) (string, error)
 	IncrementClick(code string) error
 	GetStats(ctx context.Context, code string) (*repository.URLStats, error)
@@ -42,16 +43,16 @@ func NewURLService(repo URLRepository) Shortener {
 	}
 }
 
-func (s *URLService) Shorten(ctx context.Context, longURL string) (string, error) {
+func (s *URLService) Shorten(ctx context.Context, longURL string, expiresAt *time.Time) (*repository.URL, error) {
 	validSchemas := []string{"http", "https"}
 	u, err := url.ParseRequestURI(longURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
-		return "", ErrInvalidURL
+		return nil, ErrInvalidURL
 	}
 	if !slices.Contains(validSchemas, u.Scheme) {
-		return "", ErrInvalidScheme
+		return nil, ErrInvalidScheme
 	}
-	return s.repo.Create(ctx, longURL)
+	return s.repo.Create(ctx, longURL, expiresAt)
 }
 
 func (s *URLService) GetOriginalURL(ctx context.Context, code string) (string, error) {

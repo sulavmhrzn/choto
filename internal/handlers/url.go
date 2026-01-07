@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sulavmhrzn/choto/internal/service"
@@ -11,13 +12,19 @@ import (
 
 func (h *Handler) Shorten(c *gin.Context) {
 	var req struct {
-		URL string `json:"url" binding:"required,url"`
+		URL       string `json:"url" binding:"required,url"`
+		ExpiresIn int    `json:"expires_in_hours"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid URL provided"})
 		return
 	}
-	code, err := h.URLService.Shorten(c.Request.Context(), req.URL)
+	var expiresAt *time.Time
+	if req.ExpiresIn > 0 {
+		t := time.Now().Add(time.Duration(req.ExpiresIn) * time.Hour)
+		expiresAt = &t
+	}
+	url, err := h.URLService.Shorten(c.Request.Context(), req.URL, expiresAt)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidScheme) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Accepts only http/https schemes"})
@@ -34,8 +41,13 @@ func (h *Handler) Shorten(c *gin.Context) {
 		c.Header("X-RateLimit-Remaining", strconv.FormatInt(int64(h.Config.RateLimitCount)-count, 10))
 	}
 	c.JSON(http.StatusCreated, gin.H{
-		"short_code": code,
-		"short_url":  h.Config.BaseURL + "/" + code,
+		"id":         url.ID,
+		"short_code": url.ShortCode,
+		"long_url":   url.LongURL,
+		"clicks":     url.Clicks,
+		"short_url":  h.Config.BaseURL + "/" + url.ShortCode,
+		"expires_at": url.ExpiresAt,
+		"created_at": url.CreatedAt,
 	})
 }
 

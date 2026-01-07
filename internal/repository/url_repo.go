@@ -30,35 +30,62 @@ func NewURLRepository(db *sql.DB, rdb *redis.Client, cfg *config.Config) *URLRep
 	}
 }
 
-func (r *URLRepository) Create(ctx context.Context, longURL string) (string, error) {
+type URL struct {
+	ID        int64      `json:"id"`
+	LongURL   string     `json:"long_url"`
+	ShortCode string     `json:"short_code"`
+	Clicks    int        `json:"clicks"`
+	CreatedAt time.Time  `json:"created_at"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+}
+
+type URLStats struct {
+	LongURL   string    `json:"long_url"`
+	ShortCode string    `json:"short_code"`
+	Clicks    int       `json:"clicks"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *time.Time) (*URL, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer tx.Rollback()
 
 	var id uint64
-	err = tx.QueryRowContext(ctx, "INSERT INTO urls (long_url) VALUES ($1) RETURNING id", longURL).Scan(&id)
+	err = tx.QueryRowContext(ctx, "INSERT INTO urls (long_url, expires_at) VALUES ($1, $2) RETURNING id", longURL, expiresAt).Scan(&id)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	shortCode, err := encoder.Encode(id, r.cfg.SecretKey)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	_, err = tx.ExecContext(ctx, "UPDATE urls SET short_code = $1 WHERE id = $2", shortCode, id)
+	var url URL
+	updateQuery := `UPDATE urls SET short_code = $1 WHERE id = $2
+	 RETURNING id, long_url, short_code, clicks, created_at, expires_at
+	`
+	err = tx.QueryRowContext(ctx, updateQuery, shortCode, id).Scan(
+		&url.ID,
+		&url.LongURL,
+		&url.ShortCode,
+		&url.Clicks,
+		&url.CreatedAt,
+		&url.ExpiresAt,
+	)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if err = tx.Commit(); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	_ = r.rdb.Set(ctx, shortCode, longURL, 24*time.Hour)
-	return shortCode, nil
+	return &url, nil
 }
 
 func (r *URLRepository) GetByCode(ctx context.Context, code string) (string, error) {
@@ -87,13 +114,6 @@ func (r *URLRepository) IncrementClick(code string) error {
 	query := `UPDATE urls SET clicks = clicks + 1 WHERE short_code = $1`
 	_, err := r.db.ExecContext(ctx, query, code)
 	return err
-}
-
-type URLStats struct {
-	LongURL   string    `json:"long_url"`
-	ShortCode string    `json:"short_code"`
-	Clicks    int       `json:"clicks"`
-	CreatedAt time.Time `json:"created_at"`
 }
 
 func (r *URLRepository) GetStats(ctx context.Context, code string) (*URLStats, error) {
