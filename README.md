@@ -58,7 +58,7 @@ Prerequisites:
 ### Future Roadmap
 - [ ] Docker & Docker Compose setup
 - [ ] Custom slug support
-- [ ] URL expiration dates
+- [x] URL expiration dates
 - [ ] User authentication and dashboard
 - [x] Graceful Shutdown
 - [ ] Prometheus metrics and structured JSON logging.

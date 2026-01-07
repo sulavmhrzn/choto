@@ -13,7 +13,8 @@ import (
 )
 
 var (
-	ErrNoRows = errors.New("no records found")
+	ErrNoRows      = errors.New("no records found")
+	ErrLinkExpired = errors.New("link has expired")
 )
 
 type URLRepository struct {
@@ -30,35 +31,68 @@ func NewURLRepository(db *sql.DB, rdb *redis.Client, cfg *config.Config) *URLRep
 	}
 }
 
-func (r *URLRepository) Create(ctx context.Context, longURL string) (string, error) {
+type URL struct {
+	ID        int64      `json:"id"`
+	LongURL   string     `json:"long_url"`
+	ShortCode string     `json:"short_code"`
+	Clicks    int        `json:"clicks"`
+	CreatedAt time.Time  `json:"created_at"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+}
+
+type URLStats struct {
+	LongURL   string    `json:"long_url"`
+	ShortCode string    `json:"short_code"`
+	Clicks    int       `json:"clicks"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *time.Time) (*URL, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer tx.Rollback()
 
 	var id uint64
-	err = tx.QueryRowContext(ctx, "INSERT INTO urls (long_url) VALUES ($1) RETURNING id", longURL).Scan(&id)
+	err = tx.QueryRowContext(ctx, "INSERT INTO urls (long_url, expires_at) VALUES ($1, $2) RETURNING id", longURL, expiresAt).Scan(&id)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	shortCode, err := encoder.Encode(id, r.cfg.SecretKey)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	_, err = tx.ExecContext(ctx, "UPDATE urls SET short_code = $1 WHERE id = $2", shortCode, id)
+	var url URL
+	updateQuery := `UPDATE urls SET short_code = $1 WHERE id = $2
+	 RETURNING id, long_url, short_code, clicks, created_at, expires_at
+	`
+	err = tx.QueryRowContext(ctx, updateQuery, shortCode, id).Scan(
+		&url.ID,
+		&url.LongURL,
+		&url.ShortCode,
+		&url.Clicks,
+		&url.CreatedAt,
+		&url.ExpiresAt,
+	)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if err = tx.Commit(); err != nil {
-		return "", err
+		return nil, err
 	}
 
-	_ = r.rdb.Set(ctx, shortCode, longURL, 24*time.Hour)
-	return shortCode, nil
+	cacheTTL := 24 * time.Hour
+	if url.ExpiresAt != nil {
+		cacheTTL = time.Until(*url.ExpiresAt)
+	}
+	if cacheTTL > 0 {
+		_ = r.rdb.Set(ctx, shortCode, longURL, cacheTTL)
+	}
+	return &url, nil
 }
 
 func (r *URLRepository) GetByCode(ctx context.Context, code string) (string, error) {
@@ -67,8 +101,9 @@ func (r *URLRepository) GetByCode(ctx context.Context, code string) (string, err
 		return longURL, nil
 	}
 
-	query := `SELECT long_url FROM urls WHERE short_code = $1`
-	err = r.db.QueryRowContext(ctx, query, code).Scan(&longURL)
+	var url URL
+	query := `SELECT long_url, expires_at FROM urls WHERE short_code = $1`
+	err = r.db.QueryRowContext(ctx, query, code).Scan(&url.LongURL, &url.ExpiresAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", fmt.Errorf("%w: code %s not found", ErrNoRows, code)
@@ -76,8 +111,21 @@ func (r *URLRepository) GetByCode(ctx context.Context, code string) (string, err
 		return "", fmt.Errorf("database query failed: %w", err)
 	}
 
-	_ = r.rdb.Set(ctx, code, longURL, 24*time.Hour)
-	return longURL, nil
+	if url.ExpiresAt != nil && url.ExpiresAt.Before(time.Now()) {
+		return "", ErrLinkExpired
+	}
+
+	cacheTTL := 24 * time.Hour
+	if url.ExpiresAt != nil {
+		cacheTTL = time.Until(*url.ExpiresAt)
+	}
+
+	if cacheTTL > 0 {
+		_ = r.rdb.Set(ctx, code, url.LongURL, cacheTTL)
+	}
+
+	_ = r.rdb.Set(ctx, code, url.LongURL, 24*time.Hour)
+	return url.LongURL, nil
 }
 
 func (r *URLRepository) IncrementClick(code string) error {
@@ -89,22 +137,17 @@ func (r *URLRepository) IncrementClick(code string) error {
 	return err
 }
 
-type URLStats struct {
-	LongURL   string    `json:"long_url"`
-	ShortCode string    `json:"short_code"`
-	Clicks    int       `json:"clicks"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
 func (r *URLRepository) GetStats(ctx context.Context, code string) (*URLStats, error) {
-	query := `SELECT long_url, short_code, clicks, created_at FROM urls WHERE short_code = $1`
+	query := `SELECT long_url, short_code, clicks, created_at, expires_at FROM urls WHERE short_code = $1`
 
 	var stats URLStats
+	var expiresAt *time.Time
 	err := r.db.QueryRowContext(ctx, query, code).Scan(
 		&stats.LongURL,
 		&stats.ShortCode,
 		&stats.Clicks,
 		&stats.CreatedAt,
+		&expiresAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -112,5 +155,18 @@ func (r *URLRepository) GetStats(ctx context.Context, code string) (*URLStats, e
 		}
 		return nil, err
 	}
+	if expiresAt != nil && expiresAt.Before(time.Now()) {
+		return nil, ErrLinkExpired
+	}
+
 	return &stats, nil
+}
+
+func (r *URLRepository) DeleteExpired(ctx context.Context) (int64, error) {
+	query := `DELETE FROM urls WHERE expires_at IS NOT NULL AND expires_at < NOW()`
+	res, err := r.db.ExecContext(ctx, query)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
