@@ -13,10 +13,10 @@ import (
 func (h *Handler) Shorten(c *gin.Context) {
 	var req struct {
 		URL       string `json:"url" binding:"required,url"`
-		ExpiresIn int    `json:"expires_in_hours"`
+		ExpiresIn int    `json:"expires_in_hours" binding:"number,gt=0"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid URL provided"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	var expiresAt *time.Time
