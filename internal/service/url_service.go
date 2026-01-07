@@ -92,10 +92,14 @@ func (s *URLService) GetStats(ctx context.Context, code string) (*repository.URL
 	}
 	stats, err := s.repo.GetStats(ctx, code)
 	if err != nil {
-		if errors.Is(err, repository.ErrNoRows) {
+		switch {
+		case errors.Is(err, repository.ErrNoRows):
 			return nil, ErrURLNotFound
+		case errors.Is(err, repository.ErrLinkExpired):
+			return nil, ErrShortCodeExpired
+		default:
+			return nil, fmt.Errorf("failed to get stats: %w", err)
 		}
-		return nil, fmt.Errorf("failed to get stats: %w", err)
 	}
 	return stats, nil
 

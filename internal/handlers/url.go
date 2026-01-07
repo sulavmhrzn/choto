@@ -76,11 +76,15 @@ func (h *Handler) GetStats(c *gin.Context) {
 	code := c.Param("code")
 	stats, err := h.URLService.GetStats(c.Request.Context(), code)
 	if err != nil {
-		if errors.Is(err, service.ErrURLNotFound) {
+		h.Logger.Warn("stats failed", "code", code, "err", err)
+		switch {
+		case errors.Is(err, service.ErrURLNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "Short link not found"})
-			return
+		case errors.Is(err, service.ErrShortCodeExpired):
+			c.JSON(http.StatusGone, gin.H{"error": "Short link has expired"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 	c.JSON(http.StatusOK, stats)

@@ -138,14 +138,16 @@ func (r *URLRepository) IncrementClick(code string) error {
 }
 
 func (r *URLRepository) GetStats(ctx context.Context, code string) (*URLStats, error) {
-	query := `SELECT long_url, short_code, clicks, created_at FROM urls WHERE short_code = $1`
+	query := `SELECT long_url, short_code, clicks, created_at, expires_at FROM urls WHERE short_code = $1`
 
 	var stats URLStats
+	var expiresAt *time.Time
 	err := r.db.QueryRowContext(ctx, query, code).Scan(
 		&stats.LongURL,
 		&stats.ShortCode,
 		&stats.Clicks,
 		&stats.CreatedAt,
+		&expiresAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -153,5 +155,9 @@ func (r *URLRepository) GetStats(ctx context.Context, code string) (*URLStats, e
 		}
 		return nil, err
 	}
+	if expiresAt != nil && expiresAt.Before(time.Now()) {
+		return nil, ErrLinkExpired
+	}
+
 	return &stats, nil
 }
