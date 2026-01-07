@@ -37,6 +37,10 @@ func (m *MockRepository) GetStats(ctx context.Context, code string) (*repository
 	}
 	return args.Get(0).(*repository.URLStats), args.Error(1)
 }
+func (m *MockRepository) DeleteExpired(ctx context.Context) (int64, error) {
+	args := m.Called(ctx)
+	return int64(args.Int(0)), args.Error(1)
+}
 
 func TestURLService_Shorten(t *testing.T) {
 	mockRepo := new(MockRepository)

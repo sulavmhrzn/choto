@@ -51,6 +51,10 @@ func main() {
 		Handler: router,
 	}
 
+	cleanupContext, cleanupCancel := context.WithCancel(context.Background())
+	defer cleanupCancel()
+	go urlService.StartCleanupWorker(cleanupContext, 1*time.Minute)
+
 	go func() {
 		logger.Info("Server starting", "port", cfg.ServerPort)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -72,6 +76,7 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info("Closing database and redis connections...")
+	cleanupCancel()
 	db.Close()
 	rdb.Close()
 	logger.Info("Server exited gracefully")

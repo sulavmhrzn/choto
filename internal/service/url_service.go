@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/url"
 	"slices"
 	"time"
@@ -25,6 +26,7 @@ type Shortener interface {
 	GetOriginalURL(ctx context.Context, code string) (string, error)
 	GetStats(ctx context.Context, code string) (*repository.URLStats, error)
 	TrackClick(code string)
+	StartCleanupWorker(ctx context.Context, interval time.Duration)
 }
 
 type URLRepository interface {
@@ -32,6 +34,7 @@ type URLRepository interface {
 	GetByCode(ctx context.Context, code string) (string, error)
 	IncrementClick(code string) error
 	GetStats(ctx context.Context, code string) (*repository.URLStats, error)
+	DeleteExpired(ctx context.Context) (int64, error)
 }
 
 type URLService struct {
@@ -103,4 +106,26 @@ func (s *URLService) GetStats(ctx context.Context, code string) (*repository.URL
 	}
 	return stats, nil
 
+}
+
+func (s *URLService) StartCleanupWorker(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	slog.Info("Cleanup worker started", "interval", interval)
+
+	for {
+		select {
+		case <-ticker.C:
+			count, err := s.repo.DeleteExpired(ctx)
+			if err != nil {
+				slog.Error("failed to delete expired URLs", "err", err)
+			} else {
+				slog.Info("Cleanup successful", "deleted_rows", count)
+			}
+		case <-ctx.Done():
+			slog.Info("Cleanup worker stopping...")
+			return
+		}
+	}
 }

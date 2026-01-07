@@ -161,3 +161,12 @@ func (r *URLRepository) GetStats(ctx context.Context, code string) (*URLStats, e
 
 	return &stats, nil
 }
+
+func (r *URLRepository) DeleteExpired(ctx context.Context) (int64, error) {
+	query := `DELETE FROM urls WHERE expires_at IS NOT NULL AND expires_at < NOW()`
+	res, err := r.db.ExecContext(ctx, query)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
