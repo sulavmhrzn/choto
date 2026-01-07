@@ -61,6 +61,8 @@ func (h *Handler) Redirect(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Short code required"})
 		case errors.Is(err, service.ErrURLNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "Short link not found"})
+		case errors.Is(err, service.ErrShortCodeExpired):
+			c.JSON(http.StatusGone, gin.H{"error": "Short link has expired"})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		}

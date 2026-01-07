@@ -13,7 +13,8 @@ import (
 )
 
 var (
-	ErrNoRows = errors.New("no records found")
+	ErrNoRows      = errors.New("no records found")
+	ErrLinkExpired = errors.New("link has expired")
 )
 
 type URLRepository struct {
@@ -84,7 +85,13 @@ func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *t
 		return nil, err
 	}
 
-	_ = r.rdb.Set(ctx, shortCode, longURL, 24*time.Hour)
+	cacheTTL := 24 * time.Hour
+	if url.ExpiresAt != nil {
+		cacheTTL = time.Until(*url.ExpiresAt)
+	}
+	if cacheTTL > 0 {
+		_ = r.rdb.Set(ctx, shortCode, longURL, cacheTTL)
+	}
 	return &url, nil
 }
 
@@ -94,8 +101,9 @@ func (r *URLRepository) GetByCode(ctx context.Context, code string) (string, err
 		return longURL, nil
 	}
 
-	query := `SELECT long_url FROM urls WHERE short_code = $1`
-	err = r.db.QueryRowContext(ctx, query, code).Scan(&longURL)
+	var url URL
+	query := `SELECT long_url, expires_at FROM urls WHERE short_code = $1`
+	err = r.db.QueryRowContext(ctx, query, code).Scan(&url.LongURL, &url.ExpiresAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", fmt.Errorf("%w: code %s not found", ErrNoRows, code)
@@ -103,8 +111,21 @@ func (r *URLRepository) GetByCode(ctx context.Context, code string) (string, err
 		return "", fmt.Errorf("database query failed: %w", err)
 	}
 
-	_ = r.rdb.Set(ctx, code, longURL, 24*time.Hour)
-	return longURL, nil
+	if url.ExpiresAt != nil && url.ExpiresAt.Before(time.Now()) {
+		return "", ErrLinkExpired
+	}
+
+	cacheTTL := 24 * time.Hour
+	if url.ExpiresAt != nil {
+		cacheTTL = time.Until(*url.ExpiresAt)
+	}
+
+	if cacheTTL > 0 {
+		_ = r.rdb.Set(ctx, code, url.LongURL, cacheTTL)
+	}
+
+	_ = r.rdb.Set(ctx, code, url.LongURL, 24*time.Hour)
+	return url.LongURL, nil
 }
 
 func (r *URLRepository) IncrementClick(code string) error {

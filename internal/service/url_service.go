@@ -17,6 +17,7 @@ var (
 	ErrInvalidURL        = errors.New("the provided url is not valid")
 	ErrURLNotFound       = errors.New("url not found")
 	ErrShortCodeRequired = errors.New("short code is required")
+	ErrShortCodeExpired  = errors.New("short code has already expired")
 )
 
 type Shortener interface {
@@ -61,10 +62,14 @@ func (s *URLService) GetOriginalURL(ctx context.Context, code string) (string, e
 	}
 	longURL, err := s.repo.GetByCode(ctx, code)
 	if err != nil {
-		if errors.Is(err, repository.ErrNoRows) {
+		switch {
+		case errors.Is(err, repository.ErrNoRows):
 			return "", ErrURLNotFound
+		case errors.Is(err, repository.ErrLinkExpired):
+			return "", ErrShortCodeExpired
+		default:
+			return "", fmt.Errorf("lookup failed for code %s: %w", code, err)
 		}
-		return "", fmt.Errorf("lookup failed for code %s: %w", code, err)
 	}
 	if longURL == "" {
 		return "", ErrURLNotFound
