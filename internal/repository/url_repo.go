@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -13,8 +14,9 @@ import (
 )
 
 var (
-	ErrNoRows      = errors.New("no records found")
-	ErrLinkExpired = errors.New("link has expired")
+	ErrNoRows          = errors.New("no records found")
+	ErrLinkExpired     = errors.New("link has expired")
+	ErrUniqueShortCode = errors.New("short code taken")
 )
 
 type URLRepository struct {
@@ -47,38 +49,59 @@ type URLStats struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *time.Time) (*URL, error) {
+func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *time.Time, alias string) (*URL, error) {
+	var url URL
+	var id uint64
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
+
 	defer tx.Rollback()
 
-	var id uint64
-	err = tx.QueryRowContext(ctx, "INSERT INTO urls (long_url, expires_at) VALUES ($1, $2) RETURNING id", longURL, expiresAt).Scan(&id)
-	if err != nil {
-		return nil, err
-	}
+	if alias == "" {
+		err = tx.QueryRowContext(ctx, "INSERT INTO urls (long_url, expires_at) VALUES ($1, $2) RETURNING id", longURL, expiresAt).Scan(&id)
+		if err != nil {
+			return nil, err
+		}
 
-	shortCode, err := encoder.Encode(id, r.cfg.SecretKey)
-	if err != nil {
-		return nil, err
-	}
+		shortCode, err := encoder.Encode(id, r.cfg.SecretKey)
+		if err != nil {
+			return nil, err
+		}
 
-	var url URL
-	updateQuery := `UPDATE urls SET short_code = $1 WHERE id = $2
-	 RETURNING id, long_url, short_code, clicks, created_at, expires_at
-	`
-	err = tx.QueryRowContext(ctx, updateQuery, shortCode, id).Scan(
-		&url.ID,
-		&url.LongURL,
-		&url.ShortCode,
-		&url.Clicks,
-		&url.CreatedAt,
-		&url.ExpiresAt,
-	)
-	if err != nil {
-		return nil, err
+		updateQuery := `UPDATE urls SET short_code = $1 WHERE id = $2
+		RETURNING id, long_url, short_code, clicks, created_at, expires_at
+		`
+		err = tx.QueryRowContext(ctx, updateQuery, shortCode, id).Scan(
+			&url.ID,
+			&url.LongURL,
+			&url.ShortCode,
+			&url.Clicks,
+			&url.CreatedAt,
+			&url.ExpiresAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		query := `INSERT INTO urls (long_url, expires_at, short_code) VALUES ($1, $2, $3) 
+		RETURNING
+		id, long_url, short_code, expires_at, created_at, clicks`
+		err = tx.QueryRowContext(ctx, query, longURL, expiresAt, alias).Scan(
+			&url.ID,
+			&url.LongURL,
+			&url.ShortCode,
+			&url.ExpiresAt,
+			&url.CreatedAt,
+			&url.Clicks,
+		)
+		if err != nil {
+			if strings.Contains(err.Error(), "urls_short_code_key") {
+				return nil, ErrUniqueShortCode
+			}
+			return nil, err
+		}
 	}
 
 	if err = tx.Commit(); err != nil {
@@ -90,7 +113,7 @@ func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *t
 		cacheTTL = time.Until(*url.ExpiresAt)
 	}
 	if cacheTTL > 0 {
-		_ = r.rdb.Set(ctx, shortCode, longURL, cacheTTL)
+		_ = r.rdb.Set(ctx, url.ShortCode, url.LongURL, cacheTTL)
 	}
 	return &url, nil
 }

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -13,7 +14,8 @@ import (
 func (h *Handler) Shorten(c *gin.Context) {
 	var req struct {
 		URL       string `json:"url" binding:"required,url"`
-		ExpiresIn int    `json:"expires_in_hours" binding:"number,gt=0"`
+		ExpiresIn int    `json:"expires_in_hours" binding:"omitempty,number,gt=0"`
+		Alias     string `json:"alias" binding:"omitempty,alphanum,min=3,max=20"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -24,14 +26,19 @@ func (h *Handler) Shorten(c *gin.Context) {
 		t := time.Now().Add(time.Duration(req.ExpiresIn) * time.Hour)
 		expiresAt = &t
 	}
-	url, err := h.URLService.Shorten(c.Request.Context(), req.URL, expiresAt)
+	url, err := h.URLService.Shorten(c.Request.Context(), req.URL, expiresAt, req.Alias)
 	if err != nil {
-		if errors.Is(err, service.ErrInvalidScheme) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Accepts only http/https schemes"})
-			return
-		}
 		h.Logger.Error("failed to shorted", "err", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		switch {
+		case errors.Is(err, service.ErrInvalidScheme):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Accepts only http/https schemes"})
+		case errors.Is(err, service.ErrAliasAlreadyTaken):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Alias already taken"})
+		case errors.Is(err, service.ErrReservedAlias):
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("%q is not allowed as an alias", req.Alias)})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		}
 		return
 	}
 	val, exists := c.Get("rate_limit_count")
