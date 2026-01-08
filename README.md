@@ -57,7 +57,7 @@ Prerequisites:
 
 ### Future Roadmap
 - [ ] Docker & Docker Compose setup
-- [ ] Custom slug support
+- [x] Custom slug support
 - [x] URL expiration dates
 - [ ] User authentication and dashboard
 - [x] Graceful Shutdown

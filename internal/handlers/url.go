@@ -28,7 +28,7 @@ func (h *Handler) Shorten(c *gin.Context) {
 	}
 	url, err := h.URLService.Shorten(c.Request.Context(), req.URL, expiresAt, req.Alias)
 	if err != nil {
-		h.Logger.Error("failed to shorted", "err", err)
+		h.Logger.Error("failed to shorten", "err", err)
 		switch {
 		case errors.Is(err, service.ErrInvalidScheme):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Accepts only http/https schemes"})

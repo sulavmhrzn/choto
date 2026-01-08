@@ -88,14 +88,15 @@ func (s *URLService) Shorten(ctx context.Context, longURL string, expiresAt *tim
 	if alias != "" && s.IsReserved(alias) {
 		return nil, ErrReservedAlias
 	}
-	url, err := s.repo.Create(ctx, finalURL, expiresAt, alias)
+	alias = strings.TrimSpace(strings.ToLower(alias))
+	createdURL, err := s.repo.Create(ctx, finalURL, expiresAt, alias)
 	if err != nil {
 		if errors.Is(err, repository.ErrUniqueShortCode) {
 			return nil, ErrAliasAlreadyTaken
 		}
 		return nil, err
 	}
-	return url, nil
+	return createdURL, nil
 }
 
 func (s *URLService) GetOriginalURL(ctx context.Context, code string) (string, error) {

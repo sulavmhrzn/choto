@@ -5,9 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 	"github.com/sulavmhrzn/choto/internal/config"
 	"github.com/sulavmhrzn/choto/internal/pkg/encoder"
@@ -60,7 +60,8 @@ func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *t
 	defer tx.Rollback()
 
 	if alias == "" {
-		err = tx.QueryRowContext(ctx, "INSERT INTO urls (long_url, expires_at) VALUES ($1, $2) RETURNING id", longURL, expiresAt).Scan(&id)
+		query := `INSERT INTO urls (long_url, expires_at) VALUES ($1, $2) RETURNING id`
+		err = tx.QueryRowContext(ctx, query, longURL, expiresAt).Scan(&id)
 		if err != nil {
 			return nil, err
 		}
@@ -97,8 +98,10 @@ func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *t
 			&url.Clicks,
 		)
 		if err != nil {
-			if strings.Contains(err.Error(), "urls_short_code_key") {
-				return nil, ErrUniqueShortCode
+			if err, ok := err.(*pq.Error); ok {
+				if err.Code == "23505" {
+					return nil, ErrUniqueShortCode
+				}
 			}
 			return nil, err
 		}
