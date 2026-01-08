@@ -7,7 +7,7 @@ import (
 	"log"
 	"log/slog"
 	"net/url"
-	"slices"
+	"strings"
 	"time"
 
 	"github.com/sulavmhrzn/choto/internal/repository"
@@ -19,10 +19,25 @@ var (
 	ErrURLNotFound       = errors.New("url not found")
 	ErrShortCodeRequired = errors.New("short code is required")
 	ErrShortCodeExpired  = errors.New("short code has already expired")
+	ErrAliasAlreadyTaken = errors.New("alias is already taken")
+	ErrReservedAlias     = errors.New("reserved alias is not permitted")
 )
 
+var ReservedAliases = map[string]struct{}{
+	"health": {},
+	"api":    {},
+	"stats":  {},
+	"ping":   {},
+	"admin":  {},
+	"static": {},
+}
+var ValidSchemes = map[string]struct{}{
+	"http":  {},
+	"https": {},
+}
+
 type Shortener interface {
-	Shorten(ctx context.Context, longURL string, expiresAt *time.Time) (*repository.URL, error)
+	Shorten(ctx context.Context, longURL string, expiresAt *time.Time, alias string) (*repository.URL, error)
 	GetOriginalURL(ctx context.Context, code string) (string, error)
 	GetStats(ctx context.Context, code string) (*repository.URLStats, error)
 	TrackClick(code string)
@@ -30,7 +45,7 @@ type Shortener interface {
 }
 
 type URLRepository interface {
-	Create(ctx context.Context, longURL string, expiresAt *time.Time) (*repository.URL, error)
+	Create(ctx context.Context, longURL string, expiresAt *time.Time, alias string) (*repository.URL, error)
 	GetByCode(ctx context.Context, code string) (string, error)
 	IncrementClick(code string) error
 	GetStats(ctx context.Context, code string) (*repository.URLStats, error)
@@ -47,16 +62,41 @@ func NewURLService(repo URLRepository) Shortener {
 	}
 }
 
-func (s *URLService) Shorten(ctx context.Context, longURL string, expiresAt *time.Time) (*repository.URL, error) {
-	validSchemas := []string{"http", "https"}
-	u, err := url.ParseRequestURI(longURL)
+func (s *URLService) IsReserved(alias string) bool {
+	_, exists := ReservedAliases[strings.ToLower(alias)]
+	return exists
+}
+
+func (s *URLService) IsValidScheme(scheme string) bool {
+	_, exists := ValidSchemes[scheme]
+	return exists
+}
+
+func (s *URLService) Shorten(ctx context.Context, longURL string, expiresAt *time.Time, alias string) (*repository.URL, error) {
+	cleanURL := strings.TrimSpace(longURL)
+	u, err := url.ParseRequestURI(cleanURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return nil, ErrInvalidURL
 	}
-	if !slices.Contains(validSchemas, u.Scheme) {
+	u.Scheme = strings.ToLower(u.Scheme)
+	u.Host = strings.ToLower(u.Host)
+	finalURL := u.String()
+
+	if !s.IsValidScheme(u.Scheme) {
 		return nil, ErrInvalidScheme
 	}
-	return s.repo.Create(ctx, longURL, expiresAt)
+	if alias != "" && s.IsReserved(alias) {
+		return nil, ErrReservedAlias
+	}
+	alias = strings.TrimSpace(strings.ToLower(alias))
+	createdURL, err := s.repo.Create(ctx, finalURL, expiresAt, alias)
+	if err != nil {
+		if errors.Is(err, repository.ErrUniqueShortCode) {
+			return nil, ErrAliasAlreadyTaken
+		}
+		return nil, err
+	}
+	return createdURL, nil
 }
 
 func (s *URLService) GetOriginalURL(ctx context.Context, code string) (string, error) {
