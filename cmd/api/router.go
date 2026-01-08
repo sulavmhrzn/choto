@@ -22,5 +22,7 @@ func NewRouter(rdb *redis.Client, h *handlers.Handler, cfg *config.Config) *gin.
 	router.GET("/:code", h.Redirect)
 	router.GET("/stats/:code", h.GetStats)
 	router.POST("/auth/register", h.Register)
+	router.POST("/auth/login", h.Login)
+	router.POST("/auth/refresh", h.Refresh)
 	return router
 }

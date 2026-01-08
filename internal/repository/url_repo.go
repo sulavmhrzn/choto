@@ -13,12 +13,6 @@ import (
 	"github.com/sulavmhrzn/choto/internal/pkg/encoder"
 )
 
-var (
-	ErrNoRows          = errors.New("no records found")
-	ErrLinkExpired     = errors.New("link has expired")
-	ErrUniqueShortCode = errors.New("short code taken")
-)
-
 type URLRepository struct {
 	db  *sql.DB
 	rdb *redis.Client

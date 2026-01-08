@@ -9,10 +9,6 @@ import (
 	"github.com/lib/pq"
 )
 
-var (
-	ErrDuplicateEmail = errors.New("duplicate email")
-)
-
 type UserRepository struct {
 	DB *sql.DB
 }
@@ -24,9 +20,10 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 }
 
 type User struct {
-	ID        int
-	Email     string
-	CreatedAt time.Time
+	ID           int
+	Email        string
+	CreatedAt    time.Time
+	PasswordHash string
 }
 
 func (r *UserRepository) Create(ctx context.Context, email string, passwordHash string) (*User, error) {
@@ -38,6 +35,19 @@ func (r *UserRepository) Create(ctx context.Context, email string, passwordHash 
 			if err.Code == "23505" {
 				return nil, ErrDuplicateEmail
 			}
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
+	query := `SELECT id, email, password_hash, created_at FROM users WHERE email = $1`
+	var user User
+	err := r.DB.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Email, &user.PasswordHash, &user.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoRows
 		}
 		return nil, err
 	}

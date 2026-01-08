@@ -32,3 +32,51 @@ func (h *Handler) Register(c *gin.Context) {
 		"created_at": user.CreatedAt,
 	})
 }
+
+func (h *Handler) Login(c *gin.Context) {
+	var req struct {
+		Email    string `json:"email" binding:"required,email"`
+		Password string `json:"password" binding:"required"`
+	}
+
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	token, err := h.UserService.Login(c.Request.Context(), req.Email, req.Password)
+	if err != nil {
+		h.Logger.Error("failed to login user", "email", req.Email, "err", err)
+		if errors.Is(err, service.ErrInvalidCredentials) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"access_token":  token.AccessToken,
+		"refresh_token": token.RefreshToken,
+		"token_type":    "Bearer",
+	})
+}
+
+func (h *Handler) Refresh(c *gin.Context) {
+	var req struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	newAccessToken, err := h.UserService.Refresh(c.Request.Context(), req.RefreshToken)
+	if err != nil {
+		h.Logger.Error("failed to generate new access token", "err", err)
+		if errors.Is(err, service.ErrRefreshTokenExpired) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token expired."})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"access_token": newAccessToken})
+}

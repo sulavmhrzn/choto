@@ -43,7 +43,7 @@ func main() {
 	urlRepo := repository.NewURLRepository(db, rdb, cfg)
 	urlService := service.NewURLService(urlRepo)
 	userRepo := repository.NewUserRepository(db)
-	userService := service.NewUserService(userRepo)
+	userService := service.NewUserService(userRepo, cfg, rdb)
 	handlers := handlers.NewHandler(logger, cfg, startTime, urlService, userService, rdb)
 
 	router := NewRouter(rdb, handlers, cfg)
