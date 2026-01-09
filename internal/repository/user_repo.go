@@ -53,3 +53,16 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*User, e
 	}
 	return &user, nil
 }
+
+func (r *UserRepository) GetByID(ctx context.Context, id int64) (*User, error) {
+	query := `SELECT id, email, password_hash, created_at FROM users WHERE id = $1`
+	var user User
+	err := r.DB.QueryRowContext(ctx, query, id).Scan(&user.ID, &user.Email, &user.PasswordHash, &user.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoRows
+		}
+		return nil, err
+	}
+	return &user, nil
+}

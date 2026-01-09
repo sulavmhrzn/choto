@@ -80,3 +80,24 @@ func (h *Handler) Refresh(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"access_token": newAccessToken})
 }
+
+func (h *Handler) GetMe(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		h.Logger.Error("user_id not found in context")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+	user, err := h.UserService.GetUserByID(c.Request.Context(), userID.(int64))
+	if err != nil {
+		h.Logger.Error("failed to fetch user from database", "userId", userID, "err", err)
+		if errors.Is(err, service.ErrUserNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"id": user.ID, "email": user.Email, "created_at": user.CreatedAt})
+}

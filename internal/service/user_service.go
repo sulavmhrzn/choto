@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,9 @@ var (
 	ErrEmailAlreadyInUse   = errors.New("email is already in use")
 	ErrInvalidCredentials  = errors.New("invalid credentials")
 	ErrRefreshTokenExpired = errors.New("refresh token expired")
+	ErrAccessTokenExpired  = errors.New("access token expired")
+	ErrInvalidToken        = errors.New("invalid token")
+	ErrUserNotFound        = errors.New("user not found")
 )
 
 type Token struct {
@@ -30,11 +34,14 @@ type Authenticator interface {
 	CreateUser(ctx context.Context, email string, password string) (*repository.User, error)
 	Login(ctx context.Context, email string, passwordHash string) (*Token, error)
 	Refresh(ctx context.Context, oldRefreshToken string) (string, error)
+	VerifyAccessToken(tokenString string) (jwt.MapClaims, error)
+	GetUserByID(ctx context.Context, id int64) (*repository.User, error)
 }
 
 type UserRepository interface {
 	Create(ctx context.Context, email string, passwordHash string) (*repository.User, error)
 	GetByEmail(ctx context.Context, email string) (*repository.User, error)
+	GetByID(ctx context.Context, id int64) (*repository.User, error)
 }
 
 type UserService struct {
@@ -71,6 +78,27 @@ func (s *UserService) GenerateAccessToken(userID int) (string, error) {
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.config.SecretKey))
+}
+
+func (s *UserService) VerifyAccessToken(tokenString string) (jwt.MapClaims, error) {
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			log.Printf("error verifying signing method")
+			return nil, ErrInvalidToken
+		}
+		return []byte(s.config.SecretKey), nil
+	})
+	if err != nil {
+		log.Printf("[service] error verifying token: %v", err)
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return nil, ErrAccessTokenExpired
+		}
+		return nil, ErrInvalidToken
+	}
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		return claims, nil
+	}
+	return nil, ErrInvalidToken
 }
 
 func (s *UserService) CreateUser(ctx context.Context, email string, password string) (*repository.User, error) {
@@ -118,4 +146,15 @@ func (s *UserService) Refresh(ctx context.Context, oldRefreshToken string) (stri
 		return "", ErrRefreshTokenExpired
 	}
 	return s.GenerateAccessToken(int(userID))
+}
+
+func (s *UserService) GetUserByID(ctx context.Context, id int64) (*repository.User, error) {
+	user, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, repository.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+	return user, nil
 }

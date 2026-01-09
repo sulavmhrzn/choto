@@ -12,17 +12,28 @@ import (
 
 func NewRouter(rdb *redis.Client, h *handlers.Handler, cfg *config.Config) *gin.Engine {
 	router := gin.Default()
-	router.GET("/ping", h.Ping)
-	protected := router.Group("/")
-	protected.Use(middleware.RateLimiter(rdb, cfg.RateLimitCount, time.Minute))
-	{
-		protected.POST("/shorten", h.Shorten)
-	}
 
+	v1 := router.Group("/api/v1")
+	v1.Use(middleware.RateLimiter(rdb, 100, time.Minute))
+	{
+		api := v1.Group("/")
+		api.Use(middleware.IsAuthenticated(h.UserService))
+		{
+			api.POST("/shorten", h.Shorten)
+			api.GET("/auth/me", h.GetMe)
+			api.GET("/stats/:code", h.GetStats)
+		}
+
+		auth := v1.Group("/auth")
+		{
+			auth.POST("/register", h.Register)
+			auth.POST("/login", h.Login)
+			auth.POST("/refresh", h.Refresh)
+		}
+
+		v1.GET("/ping", h.Ping)
+	}
 	router.GET("/:code", h.Redirect)
-	router.GET("/stats/:code", h.GetStats)
-	router.POST("/auth/register", h.Register)
-	router.POST("/auth/login", h.Login)
-	router.POST("/auth/refresh", h.Refresh)
+
 	return router
 }
