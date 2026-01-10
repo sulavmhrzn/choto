@@ -26,9 +26,10 @@ func (h *Handler) Shorten(c *gin.Context) {
 		t := time.Now().Add(time.Duration(req.ExpiresIn) * time.Hour)
 		expiresAt = &t
 	}
-	url, err := h.URLService.Shorten(c.Request.Context(), req.URL, expiresAt, req.Alias)
+	userID := c.GetInt64("user_id")
+	url, err := h.URLService.Shorten(c.Request.Context(), req.URL, expiresAt, req.Alias, userID)
 	if err != nil {
-		h.Logger.Error("failed to shorten", "err", err)
+		h.Logger.Error("failed to shorten", "user_id", userID, "err", err)
 		switch {
 		case errors.Is(err, service.ErrInvalidScheme):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Accepts only http/https schemes"})
@@ -81,7 +82,9 @@ func (h *Handler) Redirect(c *gin.Context) {
 
 func (h *Handler) GetStats(c *gin.Context) {
 	code := c.Param("code")
-	stats, err := h.URLService.GetStats(c.Request.Context(), code)
+	userID := c.GetInt64("user_id")
+
+	stats, err := h.URLService.GetStats(c.Request.Context(), code, userID)
 	if err != nil {
 		h.Logger.Warn("stats failed", "code", code, "err", err)
 		switch {

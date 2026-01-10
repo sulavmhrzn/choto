@@ -13,12 +13,6 @@ import (
 	"github.com/sulavmhrzn/choto/internal/pkg/encoder"
 )
 
-var (
-	ErrNoRows          = errors.New("no records found")
-	ErrLinkExpired     = errors.New("link has expired")
-	ErrUniqueShortCode = errors.New("short code taken")
-)
-
 type URLRepository struct {
 	db  *sql.DB
 	rdb *redis.Client
@@ -49,7 +43,7 @@ type URLStats struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *time.Time, alias string) (*URL, error) {
+func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*URL, error) {
 	var url URL
 	var id uint64
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -60,8 +54,9 @@ func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *t
 	defer tx.Rollback()
 
 	if alias == "" {
-		query := `INSERT INTO urls (long_url, expires_at) VALUES ($1, $2) RETURNING id`
-		err = tx.QueryRowContext(ctx, query, longURL, expiresAt).Scan(&id)
+		query := `INSERT INTO urls (long_url, expires_at, user_id) VALUES ($1, $2, $3) RETURNING id`
+		args := []any{longURL, expiresAt, userID}
+		err = tx.QueryRowContext(ctx, query, args...).Scan(&id)
 		if err != nil {
 			return nil, err
 		}
@@ -86,10 +81,11 @@ func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *t
 			return nil, err
 		}
 	} else {
-		query := `INSERT INTO urls (long_url, expires_at, short_code) VALUES ($1, $2, $3) 
+		query := `INSERT INTO urls (long_url, expires_at, short_code, user_id) VALUES ($1, $2, $3, $4) 
 		RETURNING
 		id, long_url, short_code, expires_at, created_at, clicks`
-		err = tx.QueryRowContext(ctx, query, longURL, expiresAt, alias).Scan(
+		args := []any{longURL, expiresAt, alias, userID}
+		err = tx.QueryRowContext(ctx, query, args...).Scan(
 			&url.ID,
 			&url.LongURL,
 			&url.ShortCode,
@@ -163,12 +159,15 @@ func (r *URLRepository) IncrementClick(code string) error {
 	return err
 }
 
-func (r *URLRepository) GetStats(ctx context.Context, code string) (*URLStats, error) {
-	query := `SELECT long_url, short_code, clicks, created_at, expires_at FROM urls WHERE short_code = $1`
+func (r *URLRepository) GetStats(ctx context.Context, code string, userID int64) (*URLStats, error) {
+	query := `SELECT urls.long_url, urls.short_code, urls.clicks, urls.created_at, urls.expires_at
+	FROM urls
+	WHERE short_code = $1 AND urls.user_id = $2
+	`
 
 	var stats URLStats
 	var expiresAt *time.Time
-	err := r.db.QueryRowContext(ctx, query, code).Scan(
+	err := r.db.QueryRowContext(ctx, query, code, userID).Scan(
 		&stats.LongURL,
 		&stats.ShortCode,
 		&stats.Clicks,

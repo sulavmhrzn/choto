@@ -37,18 +37,18 @@ var ValidSchemes = map[string]struct{}{
 }
 
 type Shortener interface {
-	Shorten(ctx context.Context, longURL string, expiresAt *time.Time, alias string) (*repository.URL, error)
+	Shorten(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*repository.URL, error)
 	GetOriginalURL(ctx context.Context, code string) (string, error)
-	GetStats(ctx context.Context, code string) (*repository.URLStats, error)
+	GetStats(ctx context.Context, code string, userID int64) (*repository.URLStats, error)
 	TrackClick(code string)
 	StartCleanupWorker(ctx context.Context, interval time.Duration)
 }
 
 type URLRepository interface {
-	Create(ctx context.Context, longURL string, expiresAt *time.Time, alias string) (*repository.URL, error)
+	Create(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*repository.URL, error)
 	GetByCode(ctx context.Context, code string) (string, error)
 	IncrementClick(code string) error
-	GetStats(ctx context.Context, code string) (*repository.URLStats, error)
+	GetStats(ctx context.Context, code string, userID int64) (*repository.URLStats, error)
 	DeleteExpired(ctx context.Context) (int64, error)
 }
 
@@ -72,7 +72,7 @@ func (s *URLService) IsValidScheme(scheme string) bool {
 	return exists
 }
 
-func (s *URLService) Shorten(ctx context.Context, longURL string, expiresAt *time.Time, alias string) (*repository.URL, error) {
+func (s *URLService) Shorten(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*repository.URL, error) {
 	cleanURL := strings.TrimSpace(longURL)
 	u, err := url.ParseRequestURI(cleanURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
@@ -89,7 +89,7 @@ func (s *URLService) Shorten(ctx context.Context, longURL string, expiresAt *tim
 		return nil, ErrReservedAlias
 	}
 	alias = strings.TrimSpace(strings.ToLower(alias))
-	createdURL, err := s.repo.Create(ctx, finalURL, expiresAt, alias)
+	createdURL, err := s.repo.Create(ctx, finalURL, expiresAt, alias, userID)
 	if err != nil {
 		if errors.Is(err, repository.ErrUniqueShortCode) {
 			return nil, ErrAliasAlreadyTaken
@@ -129,11 +129,11 @@ func (s *URLService) TrackClick(code string) {
 	}()
 }
 
-func (s *URLService) GetStats(ctx context.Context, code string) (*repository.URLStats, error) {
+func (s *URLService) GetStats(ctx context.Context, code string, userID int64) (*repository.URLStats, error) {
 	if code == "" {
 		return nil, ErrShortCodeRequired
 	}
-	stats, err := s.repo.GetStats(ctx, code)
+	stats, err := s.repo.GetStats(ctx, code, userID)
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrNoRows):
