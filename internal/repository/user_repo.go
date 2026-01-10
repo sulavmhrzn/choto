@@ -20,7 +20,7 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 }
 
 type User struct {
-	ID           int
+	ID           int64
 	Email        string
 	CreatedAt    time.Time
 	PasswordHash string

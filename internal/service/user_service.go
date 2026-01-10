@@ -63,17 +63,17 @@ func (s *UserService) hashPassword(password string) (string, error) {
 	return string(p), err
 }
 
-func (s *UserService) ComparePassword(rawPassword, hashedPassword string) bool {
+func (s *UserService) comparePassword(rawPassword, hashedPassword string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(rawPassword))
 	return err == nil
 
 }
 
-func (s *UserService) GenerateAccessToken(userID int) (string, error) {
+func (s *UserService) generateAccessToken(userID int64) (string, error) {
 	claims := jwt.RegisteredClaims{
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
-		Subject:   strconv.Itoa(userID),
+		Subject:   strconv.FormatInt(userID, 10),
 		Issuer:    "choto-api",
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -125,10 +125,13 @@ func (s *UserService) Login(ctx context.Context, email, password string) (*Token
 		}
 		return nil, err
 	}
-	if !s.ComparePassword(password, user.PasswordHash) {
+	if !s.comparePassword(password, user.PasswordHash) {
 		return nil, ErrInvalidCredentials
 	}
-	accessToken, err := s.GenerateAccessToken(user.ID)
+	accessToken, err := s.generateAccessToken(user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate access token: %w", err)
+	}
 	refreshToken := uuid.New().String()
 	err = s.rdb.Set(ctx, "refresh:"+refreshToken, user.ID, 7*24*time.Hour).Err()
 	if err != nil {
@@ -145,7 +148,7 @@ func (s *UserService) Refresh(ctx context.Context, oldRefreshToken string) (stri
 	if err != nil {
 		return "", ErrRefreshTokenExpired
 	}
-	return s.GenerateAccessToken(int(userID))
+	return s.generateAccessToken(userID)
 }
 
 func (s *UserService) GetUserByID(ctx context.Context, id int64) (*repository.User, error) {

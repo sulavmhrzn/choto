@@ -26,6 +26,7 @@ func (h *Handler) Register(c *gin.Context) {
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
 	}
 	c.JSON(http.StatusCreated, gin.H{
 		"email":      user.Email,
@@ -62,7 +63,7 @@ func (h *Handler) Login(c *gin.Context) {
 
 func (h *Handler) Refresh(c *gin.Context) {
 	var req struct {
-		RefreshToken string `json:"refresh_token"`
+		RefreshToken string `json:"refresh_token" binding:"required"`
 	}
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
