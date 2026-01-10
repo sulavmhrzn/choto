@@ -1,0 +1,1 @@
+ALTER TABLE urls DROP COLUMN IF EXISTS user_id;
