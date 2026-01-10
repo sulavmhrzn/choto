@@ -82,7 +82,9 @@ func (h *Handler) Redirect(c *gin.Context) {
 
 func (h *Handler) GetStats(c *gin.Context) {
 	code := c.Param("code")
-	stats, err := h.URLService.GetStats(c.Request.Context(), code)
+	userID := c.GetInt64("user_id")
+
+	stats, err := h.URLService.GetStats(c.Request.Context(), code, userID)
 	if err != nil {
 		h.Logger.Warn("stats failed", "code", code, "err", err)
 		switch {
