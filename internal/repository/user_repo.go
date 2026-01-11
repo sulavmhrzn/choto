@@ -84,7 +84,7 @@ func (r *UserRepository) GetDashboard(ctx context.Context, userID int64) (*Dashb
 	FROM urls
 	WHERE user_id = $1`
 	recentLinksQuery := `
-	SELECT short_code, long_url, clicks, created_at 
+	SELECT short_code, long_url, clicks, created_at, expires_at
 	FROM urls
 	WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10`
 
@@ -103,7 +103,7 @@ func (r *UserRepository) GetDashboard(ctx context.Context, userID int64) (*Dashb
 	for rows.Next() {
 		var link URLStats
 
-		err := rows.Scan(&link.ShortCode, &link.LongURL, &link.Clicks, &link.CreatedAt)
+		err := rows.Scan(&link.ShortCode, &link.LongURL, &link.Clicks, &link.CreatedAt, &link.ExpiresAt)
 		if err != nil {
 			return nil, err
 		}

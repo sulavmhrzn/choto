@@ -37,10 +37,11 @@ type URL struct {
 }
 
 type URLStats struct {
-	LongURL   string    `json:"long_url"`
-	ShortCode string    `json:"short_code"`
-	Clicks    int       `json:"clicks"`
-	CreatedAt time.Time `json:"created_at"`
+	LongURL   string     `json:"long_url"`
+	ShortCode string     `json:"short_code"`
+	Clicks    int        `json:"clicks"`
+	CreatedAt time.Time  `json:"created_at"`
+	ExpiresAt *time.Time `json:"expires_at"`
 }
 
 func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*URL, error) {
