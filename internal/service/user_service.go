@@ -36,12 +36,14 @@ type Authenticator interface {
 	Refresh(ctx context.Context, oldRefreshToken string) (string, error)
 	VerifyAccessToken(tokenString string) (jwt.MapClaims, error)
 	GetUserByID(ctx context.Context, id int64) (*repository.User, error)
+	GetUserDashboard(ctx context.Context, userID int64) (*repository.Dashboard, error)
 }
 
 type UserRepository interface {
 	Create(ctx context.Context, email string, passwordHash string) (*repository.User, error)
 	GetByEmail(ctx context.Context, email string) (*repository.User, error)
 	GetByID(ctx context.Context, id int64) (*repository.User, error)
+	GetDashboard(ctx context.Context, userID int64) (*repository.Dashboard, error)
 }
 
 type UserService struct {
@@ -160,4 +162,12 @@ func (s *UserService) GetUserByID(ctx context.Context, id int64) (*repository.Us
 		return nil, err
 	}
 	return user, nil
+}
+
+func (s *UserService) GetUserDashboard(ctx context.Context, userID int64) (*repository.Dashboard, error) {
+	data, err := s.repo.GetDashboard(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }

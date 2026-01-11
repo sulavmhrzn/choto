@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/lib/pq"
@@ -11,6 +12,13 @@ import (
 
 type UserRepository struct {
 	DB *sql.DB
+}
+
+type Dashboard struct {
+	TotalLinks  uint
+	TotalClicks uint
+	ActiveLinks uint
+	RecentLinks []URLStats
 }
 
 func NewUserRepository(db *sql.DB) *UserRepository {
@@ -65,4 +73,44 @@ func (r *UserRepository) GetByID(ctx context.Context, id int64) (*User, error) {
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (r *UserRepository) GetDashboard(ctx context.Context, userID int64) (*Dashboard, error) {
+	summaryQuery := `
+	SELECT 
+	COUNT(*) AS total_links,
+	COALESCE(SUM(clicks), 0) AS total_clicks,
+	COUNT(*) FILTER (WHERE expires_at > NOW() OR expires_at IS NULL)
+	FROM urls
+	WHERE user_id = $1`
+	recentLinksQuery := `
+	SELECT short_code, long_url, clicks, created_at 
+	FROM urls
+	WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10`
+
+	var dashboard Dashboard
+	err := r.DB.QueryRowContext(ctx, summaryQuery, userID).Scan(&dashboard.TotalLinks, &dashboard.TotalClicks, &dashboard.ActiveLinks)
+	if err != nil {
+		return nil, fmt.Errorf("summary query failed: %w", err)
+	}
+	rows, err := r.DB.QueryContext(ctx, recentLinksQuery, userID)
+	if err != nil {
+		return nil, fmt.Errorf("recent links query failed: %w", err)
+	}
+	defer rows.Close()
+
+	dashboard.RecentLinks = []URLStats{}
+	for rows.Next() {
+		var link URLStats
+
+		err := rows.Scan(&link.ShortCode, &link.LongURL, &link.Clicks, &link.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		dashboard.RecentLinks = append(dashboard.RecentLinks, link)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return &dashboard, nil
 }

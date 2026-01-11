@@ -21,6 +21,7 @@ func NewRouter(rdb *redis.Client, h *handlers.Handler, cfg *config.Config) *gin.
 		{
 			api.POST("/shorten", h.Shorten)
 			api.GET("/auth/me", h.GetMe)
+			api.GET("/auth/dashboard", h.GetDashboard)
 			api.GET("/stats/:code", h.GetStats)
 		}
 
