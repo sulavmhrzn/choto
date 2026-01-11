@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/sulavmhrzn/choto/internal/repository"
 )
 
@@ -42,6 +43,7 @@ type Shortener interface {
 	GetStats(ctx context.Context, code string, userID int64) (*repository.URLStats, error)
 	TrackClick(code string)
 	StartCleanupWorker(ctx context.Context, interval time.Duration)
+	DeleteURL(ctx context.Context, code string, userID int64) error
 }
 
 type URLRepository interface {
@@ -50,15 +52,18 @@ type URLRepository interface {
 	IncrementClick(code string) error
 	GetStats(ctx context.Context, code string, userID int64) (*repository.URLStats, error)
 	DeleteExpired(ctx context.Context) (int64, error)
+	DeleteByID(ctx context.Context, code string, userID int64) error
 }
 
 type URLService struct {
 	repo URLRepository
+	rdb  *redis.Client
 }
 
-func NewURLService(repo URLRepository) Shortener {
+func NewURLService(repo URLRepository, rdb *redis.Client) Shortener {
 	return &URLService{
 		repo: repo,
+		rdb:  rdb,
 	}
 }
 
@@ -168,4 +173,16 @@ func (s *URLService) StartCleanupWorker(ctx context.Context, interval time.Durat
 			return
 		}
 	}
+}
+
+func (s *URLService) DeleteURL(ctx context.Context, code string, userID int64) error {
+	s.rdb.Del(ctx, code)
+	err := s.repo.DeleteByID(ctx, code, userID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNoRows) {
+			return ErrURLNotFound
+		}
+		return err
+	}
+	return nil
 }

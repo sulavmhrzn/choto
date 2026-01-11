@@ -41,7 +41,7 @@ func main() {
 	}
 
 	urlRepo := repository.NewURLRepository(db, rdb, cfg)
-	urlService := service.NewURLService(urlRepo)
+	urlService := service.NewURLService(urlRepo, rdb)
 	userRepo := repository.NewUserRepository(db)
 	userService := service.NewUserService(userRepo, cfg, rdb)
 	handlers := handlers.NewHandler(logger, cfg, startTime, urlService, userService, rdb)

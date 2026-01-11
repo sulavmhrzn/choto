@@ -99,3 +99,20 @@ func (h *Handler) GetStats(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, stats)
 }
+
+func (h *Handler) DeleteURL(c *gin.Context) {
+	code := c.Param("code")
+	userID := c.GetInt64("user_id")
+
+	err := h.URLService.DeleteURL(c.Request.Context(), code, userID)
+	if err != nil {
+		h.Logger.Error("failed to delete url", "code", code, "err", err)
+		if errors.Is(err, service.ErrURLNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "URL not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}

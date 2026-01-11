@@ -195,3 +195,19 @@ func (r *URLRepository) DeleteExpired(ctx context.Context) (int64, error) {
 	}
 	return res.RowsAffected()
 }
+
+func (r *URLRepository) DeleteByID(ctx context.Context, code string, userID int64) error {
+	query := `DELETE FROM urls WHERE short_code = $1 AND user_id = $2`
+	result, err := r.db.ExecContext(ctx, query, code, userID)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrNoRows
+	}
+	return nil
+}
