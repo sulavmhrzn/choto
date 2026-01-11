@@ -41,7 +41,7 @@ func main() {
 	}
 
 	urlRepo := repository.NewURLRepository(db, rdb, cfg)
-	urlService := service.NewURLService(urlRepo)
+	urlService := service.NewURLService(urlRepo, rdb)
 	userRepo := repository.NewUserRepository(db)
 	userService := service.NewUserService(userRepo, cfg, rdb)
 	handlers := handlers.NewHandler(logger, cfg, startTime, urlService, userService, rdb)
@@ -55,7 +55,7 @@ func main() {
 
 	cleanupContext, cleanupCancel := context.WithCancel(context.Background())
 	defer cleanupCancel()
-	go urlService.StartCleanupWorker(cleanupContext, 1*time.Minute)
+	go urlService.StartCleanupWorker(cleanupContext, time.Duration(cfg.OldLinksCleanUpIntervalInDays)*24*time.Hour)
 
 	go func() {
 		logger.Info("Server starting", "port", cfg.ServerPort)

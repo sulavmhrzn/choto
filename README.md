@@ -59,7 +59,7 @@ Prerequisites:
 - [ ] Docker & Docker Compose setup
 - [x] Custom slug support
 - [x] URL expiration dates
-- [ ] User authentication and dashboard
+- [x] User authentication and dashboard
 - [x] Graceful Shutdown
 - [ ] Prometheus metrics and structured JSON logging.
 - [ ] Use Redis to cache "hot" URLs and reduce DB load.

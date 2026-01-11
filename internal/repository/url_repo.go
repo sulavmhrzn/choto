@@ -37,10 +37,11 @@ type URL struct {
 }
 
 type URLStats struct {
-	LongURL   string    `json:"long_url"`
-	ShortCode string    `json:"short_code"`
-	Clicks    int       `json:"clicks"`
-	CreatedAt time.Time `json:"created_at"`
+	LongURL   string     `json:"long_url"`
+	ShortCode string     `json:"short_code"`
+	Clicks    int        `json:"clicks"`
+	CreatedAt time.Time  `json:"created_at"`
+	ExpiresAt *time.Time `json:"expires_at"`
 }
 
 func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*URL, error) {
@@ -194,4 +195,20 @@ func (r *URLRepository) DeleteExpired(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	return res.RowsAffected()
+}
+
+func (r *URLRepository) DeleteByID(ctx context.Context, code string, userID int64) error {
+	query := `DELETE FROM urls WHERE short_code = $1 AND user_id = $2`
+	result, err := r.db.ExecContext(ctx, query, code, userID)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrNoRows
+	}
+	return nil
 }

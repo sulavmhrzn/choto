@@ -102,3 +102,21 @@ func (h *Handler) GetMe(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"id": user.ID, "email": user.Email, "created_at": user.CreatedAt})
 }
+
+func (h *Handler) GetDashboard(c *gin.Context) {
+	userID := c.GetInt64("user_id")
+	dashboard, err := h.UserService.GetUserDashboard(c.Request.Context(), userID)
+	if err != nil {
+		h.Logger.Error("failed to get dashboard data", "user_id", userID, "err", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"summary": map[string]any{
+			"total_links":  dashboard.TotalLinks,
+			"total_clicks": dashboard.TotalClicks,
+			"active_links": dashboard.ActiveLinks,
+		},
+		"recent_links": dashboard.RecentLinks,
+	})
+}
