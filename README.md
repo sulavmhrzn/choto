@@ -44,7 +44,10 @@ Prerequisites:
    ```dosini
     ENV=development
     SERVER_PORT=8000
-    DB_CONN=postgres://user:password@localhost:5432/choto
+    DB_CONN=postgres://user:password@localhost:5432/choto?sslmode=disable
+    DB_USER=postgres
+    DB_PASSWORD=postgres
+    DB_NAME=choto_db
     REDIS_ADDR=localhost:6379
     BASE_URL=http://localhost:8000
     RATE_LIMIT_COUNT=10
@@ -55,8 +58,22 @@ Prerequisites:
    make run
    ```
 
+### Using Docker
+- Start all services:
+   ```sh
+   docker compose up --build
+   ```
+- Stop all services:
+  ```sh
+  docker compose down
+  ```
+- Stop and remove volumes:
+   ```sh
+   docker compose down -v
+   ```
+
 ### Future Roadmap
-- [ ] Docker & Docker Compose setup
+- [x] Docker & Docker Compose setup
 - [x] Custom slug support
 - [x] URL expiration dates
 - [x] User authentication and dashboard
