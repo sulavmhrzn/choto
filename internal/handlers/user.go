@@ -18,7 +18,7 @@ func (h *Handler) Register(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	user, err := h.UserService.CreateUser(c.Request.Context(), req.Email, req.Password)
+	user, err := h.Service.UserService.CreateUser(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		h.Logger.Error("failed to create user", "err", err)
 		if errors.Is(err, service.ErrEmailAlreadyInUse) {
@@ -44,7 +44,7 @@ func (h *Handler) Login(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	token, err := h.UserService.Login(c.Request.Context(), req.Email, req.Password)
+	token, err := h.Service.UserService.Login(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		h.Logger.Error("failed to login user", "email", req.Email, "err", err)
 		if errors.Is(err, service.ErrInvalidCredentials) {
@@ -69,7 +69,7 @@ func (h *Handler) Refresh(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	newAccessToken, err := h.UserService.Refresh(c.Request.Context(), req.RefreshToken)
+	newAccessToken, err := h.Service.UserService.Refresh(c.Request.Context(), req.RefreshToken)
 	if err != nil {
 		h.Logger.Error("failed to generate new access token", "err", err)
 		if errors.Is(err, service.ErrRefreshTokenExpired) {
@@ -89,7 +89,7 @@ func (h *Handler) GetMe(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
-	user, err := h.UserService.GetUserByID(c.Request.Context(), userID.(int64))
+	user, err := h.Service.UserService.GetUserByID(c.Request.Context(), userID.(int64))
 	if err != nil {
 		h.Logger.Error("failed to fetch user from database", "userId", userID, "err", err)
 		if errors.Is(err, service.ErrUserNotFound) {
@@ -105,7 +105,7 @@ func (h *Handler) GetMe(c *gin.Context) {
 
 func (h *Handler) GetDashboard(c *gin.Context) {
 	userID := c.GetInt64("user_id")
-	dashboard, err := h.UserService.GetUserDashboard(c.Request.Context(), userID)
+	dashboard, err := h.Service.UserService.GetUserDashboard(c.Request.Context(), userID)
 	if err != nil {
 		h.Logger.Error("failed to get dashboard data", "user_id", userID, "err", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})

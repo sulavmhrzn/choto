@@ -17,7 +17,7 @@ func NewRouter(rdb *redis.Client, h *handlers.Handler, cfg *config.Config) *gin.
 	v1.Use(middleware.RateLimiter(rdb, 100, time.Minute))
 	{
 		api := v1.Group("/")
-		api.Use(middleware.IsAuthenticated(h.UserService))
+		api.Use(middleware.IsAuthenticated(h.Service.UserService))
 		{
 			api.POST("/shorten", h.Shorten)
 			api.GET("/auth/me", h.GetMe)

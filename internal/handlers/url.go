@@ -27,7 +27,7 @@ func (h *Handler) Shorten(c *gin.Context) {
 		expiresAt = &t
 	}
 	userID := c.GetInt64("user_id")
-	url, err := h.URLService.Shorten(c.Request.Context(), req.URL, expiresAt, req.Alias, userID)
+	url, err := h.Service.URLService.Shorten(c.Request.Context(), req.URL, expiresAt, req.Alias, userID)
 	if err != nil {
 		h.Logger.Error("failed to shorten", "user_id", userID, "err", err)
 		switch {
@@ -61,7 +61,7 @@ func (h *Handler) Shorten(c *gin.Context) {
 
 func (h *Handler) Redirect(c *gin.Context) {
 	code := c.Param("code")
-	longURL, err := h.URLService.GetOriginalURL(c.Request.Context(), code)
+	longURL, err := h.Service.URLService.GetOriginalURL(c.Request.Context(), code)
 	if err != nil {
 		h.Logger.Warn("redirect failed", "code", code, "err", err)
 		switch {
@@ -76,7 +76,7 @@ func (h *Handler) Redirect(c *gin.Context) {
 		}
 		return
 	}
-	h.URLService.TrackClick(code)
+	h.Service.URLService.TrackClick(code)
 	c.Redirect(http.StatusFound, longURL)
 }
 
@@ -84,7 +84,7 @@ func (h *Handler) GetStats(c *gin.Context) {
 	code := c.Param("code")
 	userID := c.GetInt64("user_id")
 
-	stats, err := h.URLService.GetStats(c.Request.Context(), code, userID)
+	stats, err := h.Service.URLService.GetStats(c.Request.Context(), code, userID)
 	if err != nil {
 		h.Logger.Warn("stats failed", "code", code, "err", err)
 		switch {
@@ -104,7 +104,7 @@ func (h *Handler) DeleteURL(c *gin.Context) {
 	code := c.Param("code")
 	userID := c.GetInt64("user_id")
 
-	err := h.URLService.DeleteURL(c.Request.Context(), code, userID)
+	err := h.Service.URLService.DeleteURL(c.Request.Context(), code, userID)
 	if err != nil {
 		h.Logger.Error("failed to delete url", "code", code, "err", err)
 		if errors.Is(err, service.ErrURLNotFound) {
