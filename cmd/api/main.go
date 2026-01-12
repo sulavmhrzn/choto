@@ -13,7 +13,6 @@ import (
 	"github.com/lmittmann/tint"
 	"github.com/sulavmhrzn/choto/internal/config"
 	"github.com/sulavmhrzn/choto/internal/handlers"
-	"github.com/sulavmhrzn/choto/internal/repository"
 	"github.com/sulavmhrzn/choto/internal/service"
 	"github.com/sulavmhrzn/choto/internal/storage"
 )
@@ -40,11 +39,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	urlRepo := repository.NewURLRepository(db, rdb, cfg)
-	urlService := service.NewURLService(urlRepo, rdb)
-	userRepo := repository.NewUserRepository(db)
-	userService := service.NewUserService(userRepo, cfg, rdb)
-	handlers := handlers.NewHandler(logger, cfg, startTime, urlService, userService, rdb)
+	svc := service.NewService(db, rdb, cfg)
+	handlers := handlers.NewHandler(logger, cfg, startTime, rdb, svc)
 
 	router := NewRouter(rdb, handlers, cfg)
 
@@ -55,7 +51,7 @@ func main() {
 
 	cleanupContext, cleanupCancel := context.WithCancel(context.Background())
 	defer cleanupCancel()
-	go urlService.StartCleanupWorker(cleanupContext, time.Duration(cfg.OldLinksCleanUpIntervalInDays)*24*time.Hour)
+	go svc.URLService.StartCleanupWorker(cleanupContext, time.Duration(cfg.OldLinksCleanUpIntervalInDays)*24*time.Hour)
 
 	go func() {
 		logger.Info("Server starting", "port", cfg.ServerPort)

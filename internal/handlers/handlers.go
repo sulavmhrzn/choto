@@ -10,28 +10,25 @@ import (
 )
 
 type Handler struct {
-	Logger      *slog.Logger
-	Config      *config.Config
-	StartTime   time.Time
-	RDB         *redis.Client
-	URLService  service.Shortener
-	UserService service.Authenticator
+	Logger    *slog.Logger
+	Config    *config.Config
+	StartTime time.Time
+	RDB       *redis.Client
+	Service   *service.Service
 }
 
 func NewHandler(
 	logger *slog.Logger,
 	cfg *config.Config,
 	startTime time.Time,
-	urlService service.Shortener,
-	userService service.Authenticator,
 	rdb *redis.Client,
+	service *service.Service,
 ) *Handler {
 	return &Handler{
-		Logger:      logger,
-		Config:      cfg,
-		StartTime:   startTime,
-		URLService:  urlService,
-		UserService: userService,
-		RDB:         rdb,
+		Logger:    logger,
+		Config:    cfg,
+		StartTime: startTime,
+		RDB:       rdb,
+		Service:   service,
 	}
 }
