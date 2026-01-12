@@ -76,7 +76,8 @@ func (h *Handler) Redirect(c *gin.Context) {
 		}
 		return
 	}
-	h.Service.URLService.TrackClick(code)
+	h.Service.URLService.DeprecatedTrackClick(code)
+	h.Service.URLService.RecordClick(c.Request.Context(), code, c.ClientIP(), c.Request.UserAgent(), c.Request.Referer())
 	c.Redirect(http.StatusFound, longURL)
 }
 

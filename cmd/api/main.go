@@ -39,7 +39,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	svc := service.NewService(db, rdb, cfg)
+	svc := service.NewService(db, rdb, cfg, logger)
 	handlers := handlers.NewHandler(logger, cfg, startTime, rdb, svc)
 
 	router := NewRouter(rdb, handlers, cfg)

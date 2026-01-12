@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -42,6 +43,16 @@ type URLStats struct {
 	Clicks    int        `json:"clicks"`
 	CreatedAt time.Time  `json:"created_at"`
 	ExpiresAt *time.Time `json:"expires_at"`
+}
+
+type Click struct {
+	URLID       int64
+	IpAddress   string
+	CountryCode string
+	UserAgent   string
+	DeviceType  string
+	Referrer    string
+	IsBot       bool
 }
 
 func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*URL, error) {
@@ -118,24 +129,27 @@ func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *t
 	return &url, nil
 }
 
-func (r *URLRepository) GetByCode(ctx context.Context, code string) (string, error) {
-	longURL, err := r.rdb.Get(ctx, code).Result()
+func (r *URLRepository) GetByCode(ctx context.Context, code string) (*URL, error) {
+	val, err := r.rdb.Get(ctx, code).Result()
 	if err == nil {
-		return longURL, nil
+		var cachedURL URL
+		if err := json.Unmarshal([]byte(val), &cachedURL); err == nil {
+			return &cachedURL, nil
+		}
 	}
 
 	var url URL
-	query := `SELECT long_url, expires_at FROM urls WHERE short_code = $1`
-	err = r.db.QueryRowContext(ctx, query, code).Scan(&url.LongURL, &url.ExpiresAt)
+	query := `SELECT id, long_url, short_code, expires_at FROM urls WHERE short_code = $1`
+	err = r.db.QueryRowContext(ctx, query, code).Scan(&url.ID, &url.LongURL, &url.ShortCode, &url.ExpiresAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", fmt.Errorf("%w: code %s not found", ErrNoRows, code)
+			return nil, fmt.Errorf("%w: code %s not found", ErrNoRows, code)
 		}
-		return "", fmt.Errorf("database query failed: %w", err)
+		return nil, fmt.Errorf("database query failed: %w", err)
 	}
 
 	if url.ExpiresAt != nil && url.ExpiresAt.Before(time.Now()) {
-		return "", ErrLinkExpired
+		return nil, ErrLinkExpired
 	}
 
 	cacheTTL := 24 * time.Hour
@@ -144,11 +158,11 @@ func (r *URLRepository) GetByCode(ctx context.Context, code string) (string, err
 	}
 
 	if cacheTTL > 0 {
-		_ = r.rdb.Set(ctx, code, url.LongURL, cacheTTL)
+		data, _ := json.Marshal(url)
+		_ = r.rdb.Set(ctx, code, data, cacheTTL)
 	}
 
-	_ = r.rdb.Set(ctx, code, url.LongURL, 24*time.Hour)
-	return url.LongURL, nil
+	return &url, nil
 }
 
 func (r *URLRepository) IncrementClick(code string) error {
@@ -211,4 +225,16 @@ func (r *URLRepository) DeleteByID(ctx context.Context, code string, userID int6
 		return ErrNoRows
 	}
 	return nil
+}
+
+func (r *URLRepository) RecordClicks(click Click) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	query := `INSERT INTO clicks 
+	(url_id, ip_address, country_code, user_agent, device_type, referrer, is_bot)
+	VALUES 
+	($1, $2, $3, $4, $5, $6, $7)`
+	args := []any{click.URLID, click.IpAddress, click.CountryCode, click.UserAgent, click.DeviceType, click.Referrer, click.IsBot}
+	_, err := r.db.ExecContext(ctx, query, args...)
+	return err
 }

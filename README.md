@@ -37,7 +37,8 @@ Prerequisites:
    git clone https://github.com/sulavmhrzn/choto/
    cd choto
    ```
-2. Create a .env file
+2. Download and move [GeoLite2-Country.mmdb](https://github.com/P3TERX/GeoLite.mmdb/releases/download/2026.01.10/GeoLite2-Country.mmdb) in the project root
+3. Create a .env file
    ```sh
    cp .env.example .env
    ```
@@ -53,7 +54,7 @@ Prerequisites:
     RATE_LIMIT_COUNT=10
     SECRET_KEY=your-secret-key
    ```
-3. Run the application
+4. Run the application
    ```sh
    make run
    ```

@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"log/slog"
+	"net"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/mileusna/useragent"
+	"github.com/oschwald/geoip2-golang"
 	"github.com/redis/go-redis/v9"
 	"github.com/sulavmhrzn/choto/internal/repository"
 )
@@ -41,29 +43,33 @@ type Shortener interface {
 	Shorten(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*repository.URL, error)
 	GetOriginalURL(ctx context.Context, code string) (string, error)
 	GetStats(ctx context.Context, code string, userID int64) (*repository.URLStats, error)
-	TrackClick(code string)
+	DeprecatedTrackClick(code string)
 	StartCleanupWorker(ctx context.Context, interval time.Duration)
 	DeleteURL(ctx context.Context, code string, userID int64) error
+	RecordClick(ctx context.Context, short_code, ip_address, user_agent, referrer string) error
 }
 
 type URLRepository interface {
 	Create(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*repository.URL, error)
-	GetByCode(ctx context.Context, code string) (string, error)
+	GetByCode(ctx context.Context, code string) (*repository.URL, error)
 	IncrementClick(code string) error
 	GetStats(ctx context.Context, code string, userID int64) (*repository.URLStats, error)
 	DeleteExpired(ctx context.Context) (int64, error)
 	DeleteByID(ctx context.Context, code string, userID int64) error
+	RecordClicks(click repository.Click) error
 }
 
 type URLService struct {
-	repo URLRepository
-	rdb  *redis.Client
+	repo   URLRepository
+	rdb    *redis.Client
+	logger *slog.Logger
 }
 
-func NewURLService(repo URLRepository, rdb *redis.Client) Shortener {
+func NewURLService(repo URLRepository, rdb *redis.Client, logger *slog.Logger) Shortener {
 	return &URLService{
-		repo: repo,
-		rdb:  rdb,
+		repo:   repo,
+		rdb:    rdb,
+		logger: logger,
 	}
 }
 
@@ -108,7 +114,7 @@ func (s *URLService) GetOriginalURL(ctx context.Context, code string) (string, e
 	if code == "" {
 		return "", ErrShortCodeRequired
 	}
-	longURL, err := s.repo.GetByCode(ctx, code)
+	url, err := s.repo.GetByCode(ctx, code)
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrNoRows):
@@ -119,17 +125,17 @@ func (s *URLService) GetOriginalURL(ctx context.Context, code string) (string, e
 			return "", fmt.Errorf("lookup failed for code %s: %w", code, err)
 		}
 	}
-	if longURL == "" {
+	if url.LongURL == "" {
 		return "", ErrURLNotFound
 	}
-	return longURL, nil
+	return url.LongURL, nil
 }
 
-func (s *URLService) TrackClick(code string) {
+func (s *URLService) DeprecatedTrackClick(code string) {
 	go func() {
 		err := s.repo.IncrementClick(code)
 		if err != nil {
-			log.Printf("could not increment click for %s: %v", code, err)
+			s.logger.Error("could not increment click", "code", code, "err", err)
 		}
 	}()
 }
@@ -157,16 +163,16 @@ func (s *URLService) StartCleanupWorker(ctx context.Context, interval time.Durat
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	slog.Info("Cleanup worker started", "interval", interval)
+	s.logger.Info("Cleanup worker started", "interval", interval)
 
 	for {
 		select {
 		case <-ticker.C:
 			count, err := s.repo.DeleteExpired(ctx)
 			if err != nil {
-				slog.Error("failed to delete expired URLs", "err", err)
+				s.logger.Error("failed to delete expired URLs", "err", err)
 			} else {
-				slog.Info("Cleanup successful", "deleted_rows", count)
+				s.logger.Info("Cleanup successful", "deleted_rows", count)
 			}
 		case <-ctx.Done():
 			slog.Info("Cleanup worker stopping...")
@@ -185,4 +191,64 @@ func (s *URLService) DeleteURL(ctx context.Context, code string, userID int64) e
 		return err
 	}
 	return nil
+}
+
+func (s *URLService) RecordClick(
+	ctx context.Context,
+	short_code,
+	ip_address,
+	user_agent,
+	referrer string,
+) error {
+	url, err := s.repo.GetByCode(ctx, short_code)
+	if err != nil {
+		return err
+	}
+	go func() {
+		countryCode := s.getCountryCode(ip_address)
+		deviceType, isBot := s.parseUserAgent(user_agent)
+		err := s.repo.RecordClicks(repository.Click{
+			URLID:       url.ID,
+			IpAddress:   ip_address,
+			CountryCode: countryCode,
+			UserAgent:   user_agent,
+			DeviceType:  deviceType,
+			Referrer:    referrer,
+			IsBot:       isBot,
+		})
+		if err != nil {
+			s.logger.Error("failed to record click", "err", err)
+		}
+	}()
+	return nil
+}
+
+func (s *URLService) parseUserAgent(uaString string) (string, bool) {
+	ua := useragent.Parse(uaString)
+	if ua.Bot {
+		return "bot", true
+	}
+	if ua.Mobile {
+		return "mobile", false
+	} else if ua.Tablet {
+		return "tablet", false
+	}
+	return "desktop", false
+
+}
+
+func (s *URLService) getCountryCode(ipAddr string) string {
+	db, err := geoip2.Open("GeoLite2-Country.mmdb")
+	if err != nil {
+		return "XX"
+	}
+
+	defer db.Close()
+
+	ip := net.ParseIP(ipAddr)
+	record, err := db.Country(ip)
+	if err != nil {
+		return "XX"
+	}
+	return record.Country.IsoCode
 }
