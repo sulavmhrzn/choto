@@ -5,13 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
+	"net/netip"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/mileusna/useragent"
-	"github.com/oschwald/geoip2-golang"
+	"github.com/oschwald/geoip2-golang/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/sulavmhrzn/choto/internal/repository"
 )
@@ -47,6 +47,7 @@ type Shortener interface {
 	StartCleanupWorker(ctx context.Context, interval time.Duration)
 	DeleteURL(ctx context.Context, code string, userID int64) error
 	RecordClick(ctx context.Context, short_code, ip_address, user_agent, referrer string) error
+	ListURLClicks(ctx context.Context, code string, userID, limit int64) ([]*repository.Click, error)
 }
 
 type URLRepository interface {
@@ -57,6 +58,7 @@ type URLRepository interface {
 	DeleteExpired(ctx context.Context) (int64, error)
 	DeleteByID(ctx context.Context, code string, userID int64) error
 	RecordClicks(click repository.Click) error
+	ListClicks(ctx context.Context, urlID, limit int64) ([]*repository.Click, error)
 }
 
 type URLService struct {
@@ -81,6 +83,45 @@ func (s *URLService) IsReserved(alias string) bool {
 func (s *URLService) IsValidScheme(scheme string) bool {
 	_, exists := ValidSchemes[scheme]
 	return exists
+}
+
+func (s *URLService) parseUserAgent(uaString string) (string, bool) {
+	ua := useragent.Parse(uaString)
+	if ua.Bot {
+		return "bot", true
+	}
+	if ua.Mobile {
+		return "mobile", false
+	} else if ua.Tablet {
+		return "tablet", false
+	}
+	return "desktop", false
+
+}
+
+func (s *URLService) getCountryCode(ipAddr string) string {
+	db, err := geoip2.Open("GeoLite2-Country.mmdb")
+	if err != nil {
+		return "XX"
+	}
+
+	defer db.Close()
+
+	ip, err := netip.ParseAddr(ipAddr)
+	if err != nil {
+		s.logger.Error("could not parse IP address", "ip", ip, "err", err)
+		return "XX"
+	}
+	record, err := db.Country(ip)
+	if err != nil {
+		s.logger.Error("could not get country from ip", "ip", ip, "err", err)
+		return "XX"
+	}
+	if !record.HasData() {
+		s.logger.Error("could not get data from ip", "ip", ip)
+		return "XX"
+	}
+	return record.RegisteredCountry.ISOCode
 }
 
 func (s *URLService) Shorten(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*repository.URL, error) {
@@ -223,32 +264,18 @@ func (s *URLService) RecordClick(
 	return nil
 }
 
-func (s *URLService) parseUserAgent(uaString string) (string, bool) {
-	ua := useragent.Parse(uaString)
-	if ua.Bot {
-		return "bot", true
-	}
-	if ua.Mobile {
-		return "mobile", false
-	} else if ua.Tablet {
-		return "tablet", false
-	}
-	return "desktop", false
-
-}
-
-func (s *URLService) getCountryCode(ipAddr string) string {
-	db, err := geoip2.Open("GeoLite2-Country.mmdb")
+func (s *URLService) ListURLClicks(ctx context.Context, code string, userID, limit int64) ([]*repository.Click, error) {
+	url, err := s.repo.GetByCode(ctx, code)
 	if err != nil {
-		return "XX"
+		if errors.Is(err, repository.ErrNoRows) {
+			return nil, ErrURLNotFound
+		}
+		return nil, err
+	}
+	if url.UserID != userID {
+		return nil, ErrURLNotFound
 	}
 
-	defer db.Close()
-
-	ip := net.ParseIP(ipAddr)
-	record, err := db.Country(ip)
-	if err != nil {
-		return "XX"
-	}
-	return record.Country.IsoCode
+	clicks, err := s.repo.ListClicks(ctx, url.ID, limit)
+	return clicks, err
 }

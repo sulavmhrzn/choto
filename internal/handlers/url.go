@@ -117,3 +117,26 @@ func (h *Handler) DeleteURL(c *gin.Context) {
 	}
 	c.Status(http.StatusNoContent)
 }
+
+func (h *Handler) GetURLClicks(c *gin.Context) {
+	code := c.Param("code")
+	userID := c.GetInt64("user_id")
+	limit, err := strconv.ParseInt(c.DefaultQuery("limit", "10"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be an integer type"})
+		return
+	}
+	clicks, err := h.Service.URLService.ListURLClicks(c.Request.Context(), code, userID, limit)
+	if err != nil {
+		h.Logger.Error("failed to list url clicks", "code", code, "user_id", userID, "limit", limit, "err", err)
+		if errors.Is(err, service.ErrURLNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "URL not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"clicks": clicks,
+	})
+}

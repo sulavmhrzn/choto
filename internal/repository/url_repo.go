@@ -32,6 +32,7 @@ type URL struct {
 	ID        int64      `json:"id"`
 	LongURL   string     `json:"long_url"`
 	ShortCode string     `json:"short_code"`
+	UserID    int64      `json:"user_id"`
 	Clicks    int        `json:"clicks"`
 	CreatedAt time.Time  `json:"created_at"`
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
@@ -46,13 +47,14 @@ type URLStats struct {
 }
 
 type Click struct {
-	URLID       int64
-	IpAddress   string
-	CountryCode string
-	UserAgent   string
-	DeviceType  string
-	Referrer    string
-	IsBot       bool
+	URLID       int64     `json:"url_id"`
+	IpAddress   string    `json:"ip_address"`
+	CountryCode string    `json:"country_code"`
+	UserAgent   string    `json:"user_agent"`
+	DeviceType  string    `json:"device_type"`
+	Referrer    string    `json:"referrer"`
+	IsBot       bool      `json:"is_bot"`
+	ClickedAt   time.Time `json:"clicked_at"`
 }
 
 func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*URL, error) {
@@ -139,8 +141,8 @@ func (r *URLRepository) GetByCode(ctx context.Context, code string) (*URL, error
 	}
 
 	var url URL
-	query := `SELECT id, long_url, short_code, expires_at FROM urls WHERE short_code = $1`
-	err = r.db.QueryRowContext(ctx, query, code).Scan(&url.ID, &url.LongURL, &url.ShortCode, &url.ExpiresAt)
+	query := `SELECT id, long_url, short_code, expires_at, user_id FROM urls WHERE short_code = $1`
+	err = r.db.QueryRowContext(ctx, query, code).Scan(&url.ID, &url.LongURL, &url.ShortCode, &url.ExpiresAt, &url.UserID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("%w: code %s not found", ErrNoRows, code)
@@ -237,4 +239,50 @@ func (r *URLRepository) RecordClicks(click Click) error {
 	args := []any{click.URLID, click.IpAddress, click.CountryCode, click.UserAgent, click.DeviceType, click.Referrer, click.IsBot}
 	_, err := r.db.ExecContext(ctx, query, args...)
 	return err
+}
+
+func (r *URLRepository) ListClicks(ctx context.Context, urlID, limit int64) ([]*Click, error) {
+	query := `
+	SELECT 
+		url_id,
+		clicked_at,
+		ip_address,
+		country_code,
+		user_agent,
+		device_type,
+		is_bot,
+		referrer
+	FROM clicks
+	WHERE url_id = $1 
+	ORDER BY clicked_at DESC
+	LIMIT $2
+	`
+	clicks := []*Click{}
+	rows, err := r.db.QueryContext(ctx, query, urlID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var click Click
+		err := rows.Scan(
+			&click.URLID,
+			&click.ClickedAt,
+			&click.IpAddress,
+			&click.CountryCode,
+			&click.UserAgent,
+			&click.DeviceType,
+			&click.IsBot,
+			&click.Referrer,
+		)
+		if err != nil {
+			return nil, err
+		}
+		clicks = append(clicks, &click)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	return clicks, nil
 }
