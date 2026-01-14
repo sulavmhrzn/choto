@@ -15,10 +15,10 @@ type UserRepository struct {
 }
 
 type Dashboard struct {
-	TotalLinks  uint
-	TotalClicks uint
-	ActiveLinks uint
-	RecentLinks []URLStats
+	TotalLinks  uint       `json:"total_links"`
+	TotalClicks uint       `json:"total_clicks"`
+	ActiveLinks uint       `json:"active_links"`
+	RecentLinks []URLStats `json:"recent_links"`
 }
 
 func NewUserRepository(db *sql.DB) *UserRepository {

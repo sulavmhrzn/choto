@@ -20,4 +20,8 @@ migrate-up:
 migrate-down:
 	migrate -path migrations -database $(DB_CONN) down
 
+swagger:
+	swag init -g cmd/api/main.go --parseDependency --parseInternal
+
+
 dev: tidy migrate-up run

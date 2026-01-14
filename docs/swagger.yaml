@@ -1,0 +1,349 @@
+basePath: /api/v1
+definitions:
+  github_com_sulavmhrzn_choto_internal_repository.Dashboard:
+    properties:
+      active_links:
+        type: integer
+      recent_links:
+        items:
+          $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_repository.URLStats'
+        type: array
+      total_clicks:
+        type: integer
+      total_links:
+        type: integer
+    type: object
+  github_com_sulavmhrzn_choto_internal_repository.URLStats:
+    properties:
+      clicks:
+        type: integer
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      long_url:
+        type: string
+      short_code:
+        type: string
+    type: object
+  internal_handlers.LoginRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      password:
+        example: yourpassword123
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  internal_handlers.LoginResponse:
+    properties:
+      access_token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+      refresh_token:
+        example: def789...
+        type: string
+      token_type:
+        example: Bearer
+        type: string
+    type: object
+  internal_handlers.PingResponse:
+    properties:
+      environment:
+        example: development
+        type: string
+      status:
+        example: up
+        type: string
+      system:
+        $ref: '#/definitions/internal_handlers.SystemStats'
+      timestamp:
+        example: "2026-01-14T14:20:42+05:45"
+        type: string
+      uptime:
+        example: 20s
+        type: string
+      version:
+        example: 1.0.0
+        type: string
+    type: object
+  internal_handlers.RefreshRequest:
+    properties:
+      refresh_token:
+        example: def789...
+        type: string
+    required:
+    - refresh_token
+    type: object
+  internal_handlers.RefreshResponse:
+    properties:
+      access_token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+    type: object
+  internal_handlers.RegisterRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      password:
+        example: strongpassword123
+        minLength: 8
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  internal_handlers.RegisterResponse:
+    properties:
+      created_at:
+        example: "2026-01-14T14:21:25Z"
+        type: string
+      email:
+        example: user@example.com
+        type: string
+    type: object
+  internal_handlers.SystemStats:
+    properties:
+      goroutines:
+        example: 8
+        type: integer
+      memory_usage_mb:
+        example: 24
+        type: integer
+    type: object
+  internal_handlers.UserResponse:
+    properties:
+      created_at:
+        example: "2026-01-14T14:21:25Z"
+        type: string
+      email:
+        example: user@example.com
+        type: string
+      id:
+        example: 1
+        type: integer
+    type: object
+externalDocs:
+  description: Choto Project Documentation
+  url: https://github.com/sulavmhrzn/choto#readme
+info:
+  contact:
+    email: support@choto.np
+    name: Choto Support
+    url: https://github.com/your-username/choto
+  description: A high-performance URL shortener service with analytics and QR code
+    generation.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: https://choto.np/terms/
+  title: Choto URL Shortener API
+  version: "1.0"
+paths:
+  /auth/dashboard:
+    get:
+      description: Returns a summary of total links, clicks, and a list of the most
+        recent links created by the user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_repository.Dashboard'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get user dashboard data
+      tags:
+      - auth
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user and return JWT access and refresh tokens.
+      parameters:
+      - description: Login Credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handlers.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handlers.LoginResponse'
+        "400":
+          description: Invalid request body
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Invalid credentials
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: User Login
+      tags:
+      - auth
+  /auth/me:
+    get:
+      description: Returns the profile information of the currently authenticated
+        user based on the JWT token.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handlers.UserResponse'
+        "401":
+          description: Unauthorized - Missing or invalid token
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: User not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get current user profile
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Exchanges a valid refresh token for a new short-lived access token.
+      parameters:
+      - description: Refresh Token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handlers.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handlers.RefreshResponse'
+        "400":
+          description: Invalid request body
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Refresh token expired
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Refresh Access Token
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Create a new user account with email and password.
+      parameters:
+      - description: Registration Details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handlers.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_handlers.RegisterResponse'
+        "400":
+          description: Invalid input (e.g. invalid email or short password)
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Email already in use
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Register a new user
+      tags:
+      - auth
+  /ping:
+    get:
+      description: Returns server status, environment details, and system metrics
+        like memory usage.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handlers.PingResponse'
+      summary: Health Check
+      tags:
+      - system
+securityDefinitions:
+  BearerAuth:
+    description: 'Type ''Bearer '' followed by your JWT token. Example: "Bearer eyJhbG..."'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
