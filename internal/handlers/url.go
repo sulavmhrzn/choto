@@ -140,3 +140,22 @@ func (h *Handler) GetURLClicks(c *gin.Context) {
 		"clicks": clicks,
 	})
 }
+
+func (h *Handler) GetURLClicksStat(c *gin.Context) {
+	code := c.Param("code")
+	userID := c.GetInt64("user_id")
+	stats, err := h.Service.URLService.GetClickStats(c.Request.Context(), code, userID)
+	if err != nil {
+		h.Logger.Error("failed to list url clicks", "code", code, "user_id", userID, "err", err)
+		if errors.Is(err, service.ErrURLNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "URL not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"short_code": code,
+		"stats":      stats,
+	})
+}

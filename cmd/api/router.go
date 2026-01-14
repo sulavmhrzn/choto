@@ -25,6 +25,7 @@ func NewRouter(rdb *redis.Client, h *handlers.Handler, cfg *config.Config) *gin.
 			api.GET("/stats/:code", h.GetStats)
 			api.DELETE("/urls/:code", h.DeleteURL)
 			api.GET("/clicks/:code", h.GetURLClicks)
+			api.GET("/clicks/stats/:code", h.GetURLClicksStat)
 		}
 
 		auth := v1.Group("/auth")

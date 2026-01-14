@@ -48,6 +48,7 @@ type Shortener interface {
 	DeleteURL(ctx context.Context, code string, userID int64) error
 	RecordClick(ctx context.Context, short_code, ip_address, user_agent, referrer string) error
 	ListURLClicks(ctx context.Context, code string, userID, limit int64) ([]*repository.Click, error)
+	GetClickStats(ctx context.Context, code string, userID int64) (*repository.ClickStat, error)
 }
 
 type URLRepository interface {
@@ -59,6 +60,7 @@ type URLRepository interface {
 	DeleteByID(ctx context.Context, code string, userID int64) error
 	RecordClicks(click repository.Click) error
 	ListClicks(ctx context.Context, urlID, limit int64) ([]*repository.Click, error)
+	GetClickStats(ctx context.Context, urlID int64) (*repository.ClickStat, error)
 }
 
 type URLService struct {
@@ -278,4 +280,22 @@ func (s *URLService) ListURLClicks(ctx context.Context, code string, userID, lim
 
 	clicks, err := s.repo.ListClicks(ctx, url.ID, limit)
 	return clicks, err
+}
+
+func (s *URLService) GetClickStats(ctx context.Context, code string, userID int64) (*repository.ClickStat, error) {
+	url, err := s.repo.GetByCode(ctx, code)
+	if err != nil {
+		if errors.Is(err, repository.ErrNoRows) {
+			return nil, ErrURLNotFound
+		}
+		return nil, err
+	}
+	if url.UserID != userID {
+		return nil, ErrURLNotFound
+	}
+	stats, err := s.repo.GetClickStats(ctx, url.ID)
+	if err != nil {
+		return nil, err
+	}
+	return stats, nil
 }
