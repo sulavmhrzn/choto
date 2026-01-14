@@ -51,7 +51,7 @@ func main() {
 
 	cleanupContext, cleanupCancel := context.WithCancel(context.Background())
 	defer cleanupCancel()
-	go svc.URLService.StartCleanupWorker(cleanupContext, time.Duration(cfg.OldLinksCleanUpIntervalInDays)*24*time.Hour)
+	go svc.URLService.StartCleanupWorker(cleanupContext, time.Duration(cfg.OldLinksCleanUpIntervalInHours)*time.Hour)
 
 	go func() {
 		logger.Info("Server starting", "port", cfg.ServerPort)

@@ -171,6 +171,8 @@ func (h *Handler) GenerateQRCode(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s_qr.png", code))
+	if c.Query("download") == "true" {
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s_qr.png", code))
+	}
 	c.Data(http.StatusOK, "image/png", data)
 }
