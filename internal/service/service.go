@@ -17,6 +17,6 @@ type Service struct {
 func NewService(db *sql.DB, rdb *redis.Client, config *config.Config, logger *slog.Logger) *Service {
 	return &Service{
 		UserService: NewUserService(repository.NewUserRepository(db), config, rdb),
-		URLService:  NewURLService(repository.NewURLRepository(db, rdb, config), rdb, logger),
+		URLService:  NewURLService(repository.NewURLRepository(db, rdb, config), rdb, logger, config),
 	}
 }
