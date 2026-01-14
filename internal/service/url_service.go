@@ -13,6 +13,8 @@ import (
 	"github.com/mileusna/useragent"
 	"github.com/oschwald/geoip2-golang/v2"
 	"github.com/redis/go-redis/v9"
+	qrcode "github.com/skip2/go-qrcode"
+	"github.com/sulavmhrzn/choto/internal/config"
 	"github.com/sulavmhrzn/choto/internal/repository"
 )
 
@@ -49,6 +51,7 @@ type Shortener interface {
 	RecordClick(ctx context.Context, short_code, ip_address, user_agent, referrer string) error
 	ListURLClicks(ctx context.Context, code string, userID, limit int64) ([]*repository.Click, error)
 	GetClickStats(ctx context.Context, code string, userID int64) (*repository.ClickStat, error)
+	GenerateQRCode(ctx context.Context, code string) ([]byte, error)
 }
 
 type URLRepository interface {
@@ -67,13 +70,15 @@ type URLService struct {
 	repo   URLRepository
 	rdb    *redis.Client
 	logger *slog.Logger
+	config *config.Config
 }
 
-func NewURLService(repo URLRepository, rdb *redis.Client, logger *slog.Logger) Shortener {
+func NewURLService(repo URLRepository, rdb *redis.Client, logger *slog.Logger, config *config.Config) Shortener {
 	return &URLService{
 		repo:   repo,
 		rdb:    rdb,
 		logger: logger,
+		config: config,
 	}
 }
 
@@ -298,4 +303,21 @@ func (s *URLService) GetClickStats(ctx context.Context, code string, userID int6
 		return nil, err
 	}
 	return stats, nil
+}
+
+func (s *URLService) GenerateQRCode(ctx context.Context, code string) ([]byte, error) {
+	url, err := s.repo.GetByCode(ctx, code)
+	if err != nil {
+		if errors.Is(err, repository.ErrNoRows) {
+			return nil, ErrURLNotFound
+		}
+		return nil, err
+	}
+	redirectURL := fmt.Sprintf("%s/%s", s.config.BaseURL, url.ShortCode)
+	png, err := qrcode.Encode(redirectURL, qrcode.Medium, 256)
+	if err != nil {
+		s.logger.Error("failed to generate qr code", "code", code, "err", err)
+		return nil, err
+	}
+	return png, nil
 }

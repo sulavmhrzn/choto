@@ -12,6 +12,7 @@ require (
 	github.com/mileusna/useragent v1.3.5
 	github.com/oschwald/geoip2-golang/v2 v2.1.0
 	github.com/redis/go-redis/v9 v9.17.2
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/speps/go-hashids/v2 v2.0.1
 	github.com/spf13/viper v1.21.0
 	golang.org/x/crypto v0.46.0

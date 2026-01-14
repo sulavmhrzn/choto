@@ -159,3 +159,20 @@ func (h *Handler) GetURLClicksStat(c *gin.Context) {
 		"stats":      stats,
 	})
 }
+
+func (h *Handler) GenerateQRCode(c *gin.Context) {
+	code := c.Param("code")
+	data, err := h.Service.URLService.GenerateQRCode(c.Request.Context(), code)
+	if err != nil {
+		if errors.Is(err, service.ErrURLNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "URL not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+	if c.Query("download") == "true" {
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s_qr.png", code))
+	}
+	c.Data(http.StatusOK, "image/png", data)
+}
