@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -31,6 +32,7 @@ type URL struct {
 	ID        int64      `json:"id"`
 	LongURL   string     `json:"long_url"`
 	ShortCode string     `json:"short_code"`
+	UserID    int64      `json:"user_id"`
 	Clicks    int        `json:"clicks"`
 	CreatedAt time.Time  `json:"created_at"`
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
@@ -42,6 +44,26 @@ type URLStats struct {
 	Clicks    int        `json:"clicks"`
 	CreatedAt time.Time  `json:"created_at"`
 	ExpiresAt *time.Time `json:"expires_at"`
+}
+
+type Click struct {
+	URLID       int64     `json:"url_id"`
+	IpAddress   string    `json:"ip_address"`
+	CountryCode string    `json:"country_code"`
+	UserAgent   string    `json:"user_agent"`
+	DeviceType  string    `json:"device_type"`
+	Referrer    string    `json:"referrer"`
+	IsBot       bool      `json:"is_bot"`
+	ClickedAt   time.Time `json:"clicked_at"`
+}
+
+type ClickStat struct {
+	TotalClicks int64          `json:"total_clicks"`
+	BotClicks   int64          `json:"bot_clicks"`
+	TopCountry  string         `json:"top_country"`
+	TopDevice   string         `json:"top_device"`
+	ByDevice    map[string]int `json:"by_device"`
+	ByCountry   map[string]int `json:"by_country"`
 }
 
 func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*URL, error) {
@@ -118,24 +140,27 @@ func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *t
 	return &url, nil
 }
 
-func (r *URLRepository) GetByCode(ctx context.Context, code string) (string, error) {
-	longURL, err := r.rdb.Get(ctx, code).Result()
+func (r *URLRepository) GetByCode(ctx context.Context, code string) (*URL, error) {
+	val, err := r.rdb.Get(ctx, code).Result()
 	if err == nil {
-		return longURL, nil
+		var cachedURL URL
+		if err := json.Unmarshal([]byte(val), &cachedURL); err == nil {
+			return &cachedURL, nil
+		}
 	}
 
 	var url URL
-	query := `SELECT long_url, expires_at FROM urls WHERE short_code = $1`
-	err = r.db.QueryRowContext(ctx, query, code).Scan(&url.LongURL, &url.ExpiresAt)
+	query := `SELECT id, long_url, short_code, expires_at, user_id FROM urls WHERE short_code = $1`
+	err = r.db.QueryRowContext(ctx, query, code).Scan(&url.ID, &url.LongURL, &url.ShortCode, &url.ExpiresAt, &url.UserID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", fmt.Errorf("%w: code %s not found", ErrNoRows, code)
+			return nil, fmt.Errorf("%w: code %s not found", ErrNoRows, code)
 		}
-		return "", fmt.Errorf("database query failed: %w", err)
+		return nil, fmt.Errorf("database query failed: %w", err)
 	}
 
 	if url.ExpiresAt != nil && url.ExpiresAt.Before(time.Now()) {
-		return "", ErrLinkExpired
+		return nil, ErrLinkExpired
 	}
 
 	cacheTTL := 24 * time.Hour
@@ -144,11 +169,11 @@ func (r *URLRepository) GetByCode(ctx context.Context, code string) (string, err
 	}
 
 	if cacheTTL > 0 {
-		_ = r.rdb.Set(ctx, code, url.LongURL, cacheTTL)
+		data, _ := json.Marshal(url)
+		_ = r.rdb.Set(ctx, code, data, cacheTTL)
 	}
 
-	_ = r.rdb.Set(ctx, code, url.LongURL, 24*time.Hour)
-	return url.LongURL, nil
+	return &url, nil
 }
 
 func (r *URLRepository) IncrementClick(code string) error {
@@ -211,4 +236,106 @@ func (r *URLRepository) DeleteByID(ctx context.Context, code string, userID int6
 		return ErrNoRows
 	}
 	return nil
+}
+
+func (r *URLRepository) RecordClicks(click Click) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	query := `INSERT INTO clicks 
+	(url_id, ip_address, country_code, user_agent, device_type, referrer, is_bot)
+	VALUES 
+	($1, $2, $3, $4, $5, $6, $7)`
+	args := []any{click.URLID, click.IpAddress, click.CountryCode, click.UserAgent, click.DeviceType, click.Referrer, click.IsBot}
+	_, err := r.db.ExecContext(ctx, query, args...)
+	return err
+}
+
+func (r *URLRepository) ListClicks(ctx context.Context, urlID, limit int64) ([]*Click, error) {
+	query := `
+	SELECT 
+		url_id,
+		clicked_at,
+		ip_address,
+		country_code,
+		user_agent,
+		device_type,
+		is_bot,
+		referrer
+	FROM clicks
+	WHERE url_id = $1 
+	ORDER BY clicked_at DESC
+	LIMIT $2
+	`
+	clicks := []*Click{}
+	rows, err := r.db.QueryContext(ctx, query, urlID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var click Click
+		err := rows.Scan(
+			&click.URLID,
+			&click.ClickedAt,
+			&click.IpAddress,
+			&click.CountryCode,
+			&click.UserAgent,
+			&click.DeviceType,
+			&click.IsBot,
+			&click.Referrer,
+		)
+		if err != nil {
+			return nil, err
+		}
+		clicks = append(clicks, &click)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	return clicks, nil
+}
+
+func (r *URLRepository) GetClickStats(ctx context.Context, urlID int64) (*ClickStat, error) {
+	var stats ClickStat
+	var topCountry, topDevice sql.NullString
+	var countryData, deviceData []byte
+
+	query := `
+	WITH country_stats AS (
+		SELECT country_code AS key, COUNT(*) AS value
+		FROM clicks WHERE url_id = $1
+		GROUP BY country_code
+	),
+	device_stats AS (
+		SELECT device_type AS key, COUNT(*) AS value
+		FROM clicks WHERE url_id = $1
+		GROUP BY device_type
+	)
+	SELECT
+		(SELECT COUNT(*) FROM clicks WHERE url_id = $1) as total_clicks,
+		(SELECT COUNT(*) FILTER (WHERE is_bot=true) FROM clicks WHERE url_id = $1) AS bot_clicks, 
+		(SELECT country_code FROM clicks WHERE url_id = $1 GROUP BY country_code ORDER BY COUNT(*) DESC LIMIT 1) as top_country,
+		(SELECT device_type FROM clicks WHERE url_id = $1 GROUP BY device_type ORDER BY COUNT(*) DESC LIMIT 1) as top_device,
+		(SELECT jsonb_object_agg(key, value) FROM country_stats) as by_country,
+		(SELECT jsonb_object_agg(key, value) FROM device_stats) as by_device
+	`
+
+	err := r.db.QueryRowContext(ctx, query, urlID).Scan(
+		&stats.TotalClicks,
+		&stats.BotClicks,
+		&topCountry,
+		&topDevice,
+		&countryData,
+		&deviceData,
+	)
+	if err != nil {
+		return nil, err
+	}
+	stats.TopCountry = topCountry.String
+	stats.TopDevice = topDevice.String
+	json.Unmarshal(countryData, &stats.ByCountry)
+	json.Unmarshal(deviceData, &stats.ByDevice)
+	return &stats, nil
+
 }
