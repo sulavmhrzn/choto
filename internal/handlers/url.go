@@ -8,15 +8,48 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sulavmhrzn/choto/internal/repository"
+	_ "github.com/sulavmhrzn/choto/internal/repository"
 	"github.com/sulavmhrzn/choto/internal/service"
 )
 
+type ShortenRequest struct {
+	URL       string `json:"url" binding:"required,url" example:"https://github.com/sulav/choto"`
+	ExpiresIn int    `json:"expires_in_hours" binding:"omitempty,number,gt=0" example:"24"`
+	Alias     string `json:"alias" binding:"omitempty,alphanum,min=3,max=10" example:"my-link"`
+}
+
+type ShortenResponse struct {
+	ID        int64      `json:"id" example:"101"`
+	ShortCode string     `json:"short_code" example:"my-link"`
+	LongURL   string     `json:"long_url" example:"https://github.com/sulav/choto"`
+	Clicks    int        `json:"clicks" example:"0"`
+	ShortURL  string     `json:"short_url" example:"http://localhost:8080/my-link"`
+	ExpiresAt *time.Time `json:"expires_at"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+type ClickStatsResponse struct {
+	ShortCode string                `json:"short_code"`
+	Stats     *repository.ClickStat `json:"stats"`
+}
+
+// Shorten godoc
+// @Summary      Shorten a URL
+// @Description  Creates a short link for a long URL with optional custom alias and expiration time.
+// @Tags         urls
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request body      ShortenRequest  true  "Shorten Request Body"
+// @Success      201     {object}  ShortenResponse
+// @Header       201     {string}  X-RateLimit-Limit      "Total requests allowed per window"
+// @Header       201     {string}  X-RateLimit-Remaining  "Remaining requests in current window"
+// @Failure      400     {object}  map[string]string "Invalid URL or Alias already taken"
+// @Failure      401     {object}  map[string]string "Unauthorized"
+// @Failure      500     {object}  map[string]string "Internal server error"
+// @Router       /shorten [post]
 func (h *Handler) Shorten(c *gin.Context) {
-	var req struct {
-		URL       string `json:"url" binding:"required,url"`
-		ExpiresIn int    `json:"expires_in_hours" binding:"omitempty,number,gt=0"`
-		Alias     string `json:"alias" binding:"omitempty,alphanum,min=3,max=20"`
-	}
+	var req ShortenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -48,17 +81,28 @@ func (h *Handler) Shorten(c *gin.Context) {
 		c.Header("X-RateLimit-Limit", strconv.FormatInt(int64(h.Config.RateLimitCount), 10))
 		c.Header("X-RateLimit-Remaining", strconv.FormatInt(int64(h.Config.RateLimitCount)-count, 10))
 	}
-	c.JSON(http.StatusCreated, gin.H{
-		"id":         url.ID,
-		"short_code": url.ShortCode,
-		"long_url":   url.LongURL,
-		"clicks":     url.Clicks,
-		"short_url":  h.Config.BaseURL + "/" + url.ShortCode,
-		"expires_at": url.ExpiresAt,
-		"created_at": url.CreatedAt,
+	c.JSON(http.StatusCreated, ShortenResponse{
+		ID:        url.ID,
+		ShortCode: url.ShortCode,
+		LongURL:   url.LongURL,
+		Clicks:    url.Clicks,
+		ShortURL:  h.Config.BaseURL + "/" + url.ShortCode,
+		ExpiresAt: url.ExpiresAt,
+		CreatedAt: url.CreatedAt,
 	})
 }
 
+// Redirect godoc
+// @Summary      Redirect to long URL
+// @Description  Retrieves the original URL associated with the short code, records click analytics (IP, UA, Referer), and performs a 302 redirect.
+// @Tags         redirection
+// @Param        code  path      string  true  "Short URL Code"
+// @Success      302   {string}  string  "Redirecting to original URL"
+// @Failure      400   {object}  map[string]string "Short code required"
+// @Failure      404   {object}  map[string]string "Short link not found"
+// @Failure      410   {object}  map[string]string "Short link has expired"
+// @Failure      500   {object}  map[string]string "Internal server error"
+// @Router       /{code} [get]
 func (h *Handler) Redirect(c *gin.Context) {
 	code := c.Param("code")
 	longURL, err := h.Service.URLService.GetOriginalURL(c.Request.Context(), code)
@@ -81,6 +125,19 @@ func (h *Handler) Redirect(c *gin.Context) {
 	c.Redirect(http.StatusFound, longURL)
 }
 
+// GetStats godoc
+// @Summary      Get analytics for a short code
+// @Description  Returns detailed click statistics including browser, platform, and daily usage data.
+// @Tags         urls
+// @Produce      json
+// @Security     BearerAuth
+// @Param        code  path      string  true  "Short URL Code"
+// @Success      200   {object}  repository.URLStats
+// @Failure      401   {object}  map[string]string "Unauthorized"
+// @Failure      404   {object}  map[string]string "Short link not found"
+// @Failure      410   {object}  map[string]string "Short link has expired"
+// @Failure      500   {object}  map[string]string "Internal server error"
+// @Router       /stats/{code} [get]
 func (h *Handler) GetStats(c *gin.Context) {
 	code := c.Param("code")
 	userID := c.GetInt64("user_id")
@@ -101,6 +158,18 @@ func (h *Handler) GetStats(c *gin.Context) {
 	c.JSON(http.StatusOK, stats)
 }
 
+// DeleteURL godoc
+// @Summary      Delete a short URL
+// @Description  Permanently removes a short URL and its associated analytics. Only the owner can delete the link.
+// @Tags         urls
+// @Produce      json
+// @Security     BearerAuth
+// @Param        code  path  string  true  "Short URL Code"
+// @Success      204   "No Content - URL successfully deleted"
+// @Failure      401   {object}   map[string]string "Unauthorized"
+// @Failure      404   {object}   map[string]string "URL not found or doesn't belong to user"
+// @Failure      500   {object}   map[string]string "Internal server error"
+// @Router       /urls/{code} [delete]
 func (h *Handler) DeleteURL(c *gin.Context) {
 	code := c.Param("code")
 	userID := c.GetInt64("user_id")
@@ -118,6 +187,19 @@ func (h *Handler) DeleteURL(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// GetURLClicks godoc
+// @Summary      List raw click logs
+// @Description  Returns a list of individual click events for a specific short code, including IP, User-Agent, and Referer.
+// @Tags         urls
+// @Produce      json
+// @Security     BearerAuth
+// @Param        code   path      string  true  "Short URL Code"
+// @Param        limit  query     int     false "Number of records to return (default 10)" default(10)
+// @Success      200    {object}  []repository.Click
+// @Failure      400    {object}  map[string]string "Invalid limit parameter"
+// @Failure      401    {object}  map[string]string "Unauthorized"
+// @Failure      404    {object}  map[string]string "URL not found"
+// @Router       /urls/{code}/clicks [get]
 func (h *Handler) GetURLClicks(c *gin.Context) {
 	code := c.Param("code")
 	userID := c.GetInt64("user_id")
@@ -141,6 +223,18 @@ func (h *Handler) GetURLClicks(c *gin.Context) {
 	})
 }
 
+// GetURLClicksStat godoc
+// @Summary      Get time-series click statistics
+// @Description  Returns aggregated daily click counts for a specific short code. Ideal for rendering analytics charts.
+// @Tags         urls
+// @Produce      json
+// @Security     BearerAuth
+// @Param        code  path      string  true  "Short URL Code"
+// @Success      200   {object}  ClickStatsResponse
+// @Failure      401   {object}  map[string]string "Unauthorized"
+// @Failure      404   {object}  map[string]string "URL not found"
+// @Failure      500   {object}  map[string]string "Internal server error"
+// @Router       /urls/{code}/stats [get]
 func (h *Handler) GetURLClicksStat(c *gin.Context) {
 	code := c.Param("code")
 	userID := c.GetInt64("user_id")
@@ -154,12 +248,23 @@ func (h *Handler) GetURLClicksStat(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"short_code": code,
-		"stats":      stats,
+	c.JSON(http.StatusOK, ClickStatsResponse{
+		ShortCode: code,
+		Stats:     stats,
 	})
 }
 
+// GenerateQRCode godoc
+// @Summary      Generate QR Code
+// @Description  Generates a PNG QR code for a given short code. Supports direct viewing or forced download.
+// @Tags         urls
+// @Produce      image/png
+// @Param        code      path      string  true   "Short URL Code"
+// @Param        download  query     bool    false  "Force download as attachment"
+// @Success      200       {file}    binary  "QR Code image in PNG format"
+// @Failure      404       {object}  map[string]string "URL not found"
+// @Failure      500       {object}  map[string]string "Internal server error"
+// @Router       /urls/{code}/qr [get]
 func (h *Handler) GenerateQRCode(c *gin.Context) {
 	code := c.Param("code")
 	data, err := h.Service.URLService.GenerateQRCode(c.Request.Context(), code)

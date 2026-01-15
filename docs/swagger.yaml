@@ -1,5 +1,43 @@
 basePath: /api/v1
 definitions:
+  github_com_sulavmhrzn_choto_internal_repository.Click:
+    properties:
+      clicked_at:
+        type: string
+      country_code:
+        type: string
+      device_type:
+        type: string
+      ip_address:
+        type: string
+      is_bot:
+        type: boolean
+      referrer:
+        type: string
+      url_id:
+        type: integer
+      user_agent:
+        type: string
+    type: object
+  github_com_sulavmhrzn_choto_internal_repository.ClickStat:
+    properties:
+      bot_clicks:
+        type: integer
+      by_country:
+        additionalProperties:
+          type: integer
+        type: object
+      by_device:
+        additionalProperties:
+          type: integer
+        type: object
+      top_country:
+        type: string
+      top_device:
+        type: string
+      total_clicks:
+        type: integer
+    type: object
   github_com_sulavmhrzn_choto_internal_repository.Dashboard:
     properties:
       active_links:
@@ -25,6 +63,13 @@ definitions:
         type: string
       short_code:
         type: string
+    type: object
+  internal_handlers.ClickStatsResponse:
+    properties:
+      short_code:
+        type: string
+      stats:
+        $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_repository.ClickStat'
     type: object
   internal_handlers.LoginRequest:
     properties:
@@ -106,6 +151,44 @@ definitions:
         example: user@example.com
         type: string
     type: object
+  internal_handlers.ShortenRequest:
+    properties:
+      alias:
+        example: my-link
+        maxLength: 10
+        minLength: 3
+        type: string
+      expires_in_hours:
+        example: 24
+        type: integer
+      url:
+        example: https://github.com/sulav/choto
+        type: string
+    required:
+    - url
+    type: object
+  internal_handlers.ShortenResponse:
+    properties:
+      clicks:
+        example: 0
+        type: integer
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        example: 101
+        type: integer
+      long_url:
+        example: https://github.com/sulav/choto
+        type: string
+      short_code:
+        example: my-link
+        type: string
+      short_url:
+        example: http://localhost:8080/my-link
+        type: string
+    type: object
   internal_handlers.SystemStats:
     properties:
       goroutines:
@@ -144,6 +227,48 @@ info:
   title: Choto URL Shortener API
   version: "1.0"
 paths:
+  /{code}:
+    get:
+      description: Retrieves the original URL associated with the short code, records
+        click analytics (IP, UA, Referer), and performs a 302 redirect.
+      parameters:
+      - description: Short URL Code
+        in: path
+        name: code
+        required: true
+        type: string
+      responses:
+        "302":
+          description: Redirecting to original URL
+          schema:
+            type: string
+        "400":
+          description: Short code required
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Short link not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "410":
+          description: Short link has expired
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Redirect to long URL
+      tags:
+      - redirection
   /auth/dashboard:
     get:
       description: Returns a summary of total links, clicks, and a list of the most
@@ -340,6 +465,263 @@ paths:
       summary: Health Check
       tags:
       - system
+  /shorten:
+    post:
+      consumes:
+      - application/json
+      description: Creates a short link for a long URL with optional custom alias
+        and expiration time.
+      parameters:
+      - description: Shorten Request Body
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handlers.ShortenRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          headers:
+            X-RateLimit-Limit:
+              description: Total requests allowed per window
+              type: string
+            X-RateLimit-Remaining:
+              description: Remaining requests in current window
+              type: string
+          schema:
+            $ref: '#/definitions/internal_handlers.ShortenResponse'
+        "400":
+          description: Invalid URL or Alias already taken
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Shorten a URL
+      tags:
+      - urls
+  /stats/{code}:
+    get:
+      description: Returns detailed click statistics including browser, platform,
+        and daily usage data.
+      parameters:
+      - description: Short URL Code
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_repository.URLStats'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Short link not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "410":
+          description: Short link has expired
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get analytics for a short code
+      tags:
+      - urls
+  /urls/{code}:
+    delete:
+      description: Permanently removes a short URL and its associated analytics. Only
+        the owner can delete the link.
+      parameters:
+      - description: Short URL Code
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content - URL successfully deleted
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: URL not found or doesn't belong to user
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a short URL
+      tags:
+      - urls
+  /urls/{code}/clicks:
+    get:
+      description: Returns a list of individual click events for a specific short
+        code, including IP, User-Agent, and Referer.
+      parameters:
+      - description: Short URL Code
+        in: path
+        name: code
+        required: true
+        type: string
+      - default: 10
+        description: Number of records to return (default 10)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_repository.Click'
+            type: array
+        "400":
+          description: Invalid limit parameter
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: URL not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List raw click logs
+      tags:
+      - urls
+  /urls/{code}/qr:
+    get:
+      description: Generates a PNG QR code for a given short code. Supports direct
+        viewing or forced download.
+      parameters:
+      - description: Short URL Code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: Force download as attachment
+        in: query
+        name: download
+        type: boolean
+      produces:
+      - image/png
+      responses:
+        "200":
+          description: QR Code image in PNG format
+          schema:
+            type: file
+        "404":
+          description: URL not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Generate QR Code
+      tags:
+      - urls
+  /urls/{code}/stats:
+    get:
+      description: Returns aggregated daily click counts for a specific short code.
+        Ideal for rendering analytics charts.
+      parameters:
+      - description: Short URL Code
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handlers.ClickStatsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: URL not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get time-series click statistics
+      tags:
+      - urls
 securityDefinitions:
   BearerAuth:
     description: 'Type ''Bearer '' followed by your JWT token. Example: "Bearer eyJhbG..."'
