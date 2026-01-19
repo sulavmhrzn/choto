@@ -11,12 +11,35 @@ import (
 	"time"
 
 	"github.com/lmittmann/tint"
+	"github.com/sulavmhrzn/choto/docs"
+	_ "github.com/sulavmhrzn/choto/docs"
 	"github.com/sulavmhrzn/choto/internal/config"
 	"github.com/sulavmhrzn/choto/internal/handlers"
 	"github.com/sulavmhrzn/choto/internal/service"
 	"github.com/sulavmhrzn/choto/internal/storage"
 )
 
+// @title           Choto URL Shortener API
+// @version         1.0
+// @description     A high-performance URL shortener service with analytics and QR code generation.
+// @termsOfService  https://choto.np/terms/
+
+// @contact.name   Choto Support
+// @contact.url    https://github.com/your-username/choto
+// @contact.email  support@choto.np
+
+// @license.name  MIT
+// @license.url   https://opensource.org/licenses/MIT
+
+// @BasePath  /api/v1
+
+// @securityDefinitions.apikey BearerAuth
+// @in                         header
+// @name                       Authorization
+// @description                Type 'Bearer ' followed by your JWT token. Example: "Bearer eyJhbG..."
+
+// @externalDocs.description  Choto Project Documentation
+// @externalDocs.url          https://github.com/sulavmhrzn/choto#readme
 func main() {
 	startTime := time.Now()
 	logger := slog.New(tint.NewHandler(os.Stdout, nil))
@@ -43,7 +66,7 @@ func main() {
 	handlers := handlers.NewHandler(logger, cfg, startTime, rdb, svc)
 
 	router := NewRouter(rdb, handlers, cfg)
-
+	docs.SwaggerInfo.Host = fmt.Sprintf("localhost:%s", cfg.ServerPort)
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", cfg.ServerPort),
 		Handler: router,

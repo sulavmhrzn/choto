@@ -1,0 +1,759 @@
+basePath: /api/v1
+definitions:
+  github_com_sulavmhrzn_choto_internal_dtos.ClickResponse:
+    properties:
+      clicked_at:
+        example: "2026-01-19T11:20:00Z"
+        type: string
+      country_code:
+        example: NP
+        type: string
+      device_type:
+        example: Desktop
+        type: string
+      ip_address:
+        example: 103.10.24.1
+        type: string
+      is_bot:
+        example: false
+        type: boolean
+      referrer:
+        example: https://twitter.com/
+        type: string
+      url_id:
+        example: 45
+        type: integer
+      user_agent:
+        example: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)...
+        type: string
+    type: object
+  github_com_sulavmhrzn_choto_internal_dtos.ClickStatDTO:
+    properties:
+      bot_clicks:
+        example: 12
+        type: integer
+      by_country:
+        additionalProperties:
+          type: integer
+        example:
+          IN: 50
+          NP: 800
+          US: 150
+        type: object
+      by_device:
+        additionalProperties:
+          type: integer
+        example:
+          Desktop: 250
+          Mobile: 750
+        type: object
+      top_country:
+        example: Nepal
+        type: string
+      top_device:
+        example: Mobile
+        type: string
+      total_clicks:
+        example: 1000
+        type: integer
+    type: object
+  github_com_sulavmhrzn_choto_internal_dtos.ClickStatsResponse:
+    properties:
+      short_code:
+        example: choto-api
+        type: string
+      stats:
+        $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_dtos.ClickStatDTO'
+    type: object
+  github_com_sulavmhrzn_choto_internal_dtos.DashboardResponse:
+    properties:
+      active_links:
+        example: 10
+        type: integer
+      recent_links:
+        items:
+          $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_dtos.URLStatsResponse'
+        type: array
+      total_clicks:
+        example: 450
+        type: integer
+      total_links:
+        example: 12
+        type: integer
+    type: object
+  github_com_sulavmhrzn_choto_internal_dtos.LoginRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      password:
+        example: yourpassword123
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  github_com_sulavmhrzn_choto_internal_dtos.LoginResponse:
+    properties:
+      access_token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+      refresh_token:
+        example: def789...
+        type: string
+      token_type:
+        example: Bearer
+        type: string
+    type: object
+  github_com_sulavmhrzn_choto_internal_dtos.PingResponse:
+    properties:
+      environment:
+        example: development
+        type: string
+      status:
+        example: up
+        type: string
+      system:
+        $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_dtos.SystemStats'
+      timestamp:
+        example: "2026-01-14T14:20:42+05:45"
+        type: string
+      uptime:
+        example: 20s
+        type: string
+      version:
+        example: 1.0.0
+        type: string
+    type: object
+  github_com_sulavmhrzn_choto_internal_dtos.RefreshRequest:
+    properties:
+      refresh_token:
+        example: def789...
+        type: string
+    required:
+    - refresh_token
+    type: object
+  github_com_sulavmhrzn_choto_internal_dtos.RefreshResponse:
+    properties:
+      access_token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+    type: object
+  github_com_sulavmhrzn_choto_internal_dtos.RegisterRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      password:
+        example: strongpassword123
+        minLength: 8
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  github_com_sulavmhrzn_choto_internal_dtos.RegisterResponse:
+    properties:
+      created_at:
+        example: "2026-01-14T14:21:25Z"
+        type: string
+      email:
+        example: user@example.com
+        type: string
+    type: object
+  github_com_sulavmhrzn_choto_internal_dtos.ShortenRequest:
+    properties:
+      alias:
+        example: my-link
+        maxLength: 10
+        minLength: 3
+        type: string
+      expires_in_hours:
+        example: 24
+        type: integer
+      url:
+        example: https://github.com/sulav/choto
+        type: string
+    required:
+    - url
+    type: object
+  github_com_sulavmhrzn_choto_internal_dtos.ShortenResponse:
+    properties:
+      clicks:
+        example: 0
+        type: integer
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        example: 101
+        type: integer
+      long_url:
+        example: https://github.com/sulav/choto
+        type: string
+      short_code:
+        example: my-link
+        type: string
+      short_url:
+        example: http://localhost:8080/my-link
+        type: string
+    type: object
+  github_com_sulavmhrzn_choto_internal_dtos.SystemStats:
+    properties:
+      goroutines:
+        example: 8
+        type: integer
+      memory_usage_mb:
+        example: 24
+        type: integer
+    type: object
+  github_com_sulavmhrzn_choto_internal_dtos.URLStatsResponse:
+    properties:
+      clicks:
+        example: 154
+        type: integer
+      created_at:
+        example: "2026-01-14T15:04:05Z"
+        type: string
+      expires_at:
+        example: "2026-02-14T15:04:05Z"
+        type: string
+      long_url:
+        example: https://github.com/sulavmhrzn/choto
+        type: string
+      short_code:
+        example: choto-git
+        type: string
+    type: object
+  github_com_sulavmhrzn_choto_internal_dtos.UserResponse:
+    properties:
+      created_at:
+        example: "2026-01-14T14:21:25Z"
+        type: string
+      email:
+        example: user@example.com
+        type: string
+      id:
+        example: 1
+        type: integer
+    type: object
+externalDocs:
+  description: Choto Project Documentation
+  url: https://github.com/sulavmhrzn/choto#readme
+info:
+  contact:
+    email: support@choto.np
+    name: Choto Support
+    url: https://github.com/your-username/choto
+  description: A high-performance URL shortener service with analytics and QR code
+    generation.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: https://choto.np/terms/
+  title: Choto URL Shortener API
+  version: "1.0"
+paths:
+  /{code}:
+    get:
+      description: Retrieves the original URL associated with the short code, records
+        click analytics (IP, UA, Referer), and performs a 302 redirect.
+      parameters:
+      - description: Short URL Code
+        in: path
+        name: code
+        required: true
+        type: string
+      responses:
+        "302":
+          description: Redirecting to original URL
+          schema:
+            type: string
+        "400":
+          description: Short code required
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Short link not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "410":
+          description: Short link has expired
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Redirect to long URL
+      tags:
+      - redirection
+  /auth/dashboard:
+    get:
+      description: Returns a summary of total links, clicks, and a list of the most
+        recent links created by the user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_dtos.DashboardResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get user dashboard data
+      tags:
+      - auth
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user and return JWT access and refresh tokens.
+      parameters:
+      - description: Login Credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_dtos.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_dtos.LoginResponse'
+        "400":
+          description: Invalid request body
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Invalid credentials
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: User Login
+      tags:
+      - auth
+  /auth/me:
+    get:
+      description: Returns the profile information of the currently authenticated
+        user based on the JWT token.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_dtos.UserResponse'
+        "401":
+          description: Unauthorized - Missing or invalid token
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: User not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get current user profile
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Exchanges a valid refresh token for a new short-lived access token.
+      parameters:
+      - description: Refresh Token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_dtos.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_dtos.RefreshResponse'
+        "400":
+          description: Invalid request body
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Refresh token expired
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Refresh Access Token
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Create a new user account with email and password.
+      parameters:
+      - description: Registration Details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_dtos.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_dtos.RegisterResponse'
+        "400":
+          description: Invalid input (e.g. invalid email or short password)
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Email already in use
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Register a new user
+      tags:
+      - auth
+  /clicks/{code}/:
+    get:
+      description: Returns a list of individual click events for a specific short
+        code, including IP, User-Agent, and Referer.
+      parameters:
+      - description: Short URL Code
+        in: path
+        name: code
+        required: true
+        type: string
+      - default: 10
+        description: Number of records to return (default 10)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_dtos.ClickResponse'
+            type: array
+        "400":
+          description: Invalid limit parameter
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: URL not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List raw click logs
+      tags:
+      - clicks
+  /clicks/{code}/stats:
+    get:
+      description: Returns aggregated daily click counts for a specific short code.
+        Ideal for rendering analytics charts.
+      parameters:
+      - description: Short URL Code
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_dtos.ClickStatsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: URL not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get time-series click statistics
+      tags:
+      - clicks
+  /ping:
+    get:
+      description: Returns server status, environment details, and system metrics
+        like memory usage.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_dtos.PingResponse'
+      summary: Health Check
+      tags:
+      - system
+  /urls/{code}:
+    delete:
+      description: Permanently removes a short URL and its associated analytics. Only
+        the owner can delete the link.
+      parameters:
+      - description: Short URL Code
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content - URL successfully deleted
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: URL not found or doesn't belong to user
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a short URL
+      tags:
+      - urls
+  /urls/{code}/qr:
+    get:
+      description: Generates a PNG QR code for a given short code. Supports direct
+        viewing or forced download.
+      parameters:
+      - description: Short URL Code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: Force download as attachment
+        in: query
+        name: download
+        type: boolean
+      produces:
+      - image/png
+      responses:
+        "200":
+          description: QR Code image in PNG format
+          schema:
+            type: file
+        "404":
+          description: URL not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Generate QR Code
+      tags:
+      - urls
+  /urls/shorten:
+    post:
+      consumes:
+      - application/json
+      description: Creates a short link for a long URL with optional custom alias
+        and expiration time.
+      parameters:
+      - description: Shorten Request Body
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_dtos.ShortenRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          headers:
+            X-RateLimit-Limit:
+              description: Total requests allowed per window
+              type: string
+            X-RateLimit-Remaining:
+              description: Remaining requests in current window
+              type: string
+          schema:
+            $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_dtos.ShortenResponse'
+        "400":
+          description: Invalid URL or Alias already taken
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Shorten a URL
+      tags:
+      - urls
+  /urls/stats/{code}:
+    get:
+      description: Returns detailed click statistics including browser, platform,
+        and daily usage data.
+      parameters:
+      - description: Short URL Code
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_sulavmhrzn_choto_internal_dtos.URLStatsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Short link not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "410":
+          description: Short link has expired
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get analytics for a short code
+      tags:
+      - urls
+securityDefinitions:
+  BearerAuth:
+    description: 'Type ''Bearer '' followed by your JWT token. Example: "Bearer eyJhbG..."'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
