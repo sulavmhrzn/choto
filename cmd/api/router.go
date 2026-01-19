@@ -25,14 +25,14 @@ func NewRouter(rdb *redis.Client, h *handlers.Handler, cfg *config.Config) *gin.
 		api := v1.Group("/")
 		api.Use(middleware.IsAuthenticated(h.Service.UserService))
 		{
-			api.POST("/shorten", h.Shorten)
 			api.GET("/auth/me", h.GetMe)
 			api.GET("/auth/dashboard", h.GetDashboard)
-			api.GET("/stats/:code", h.GetStats)
+			api.POST("/urls/shorten", h.Shorten)
+			api.GET("/urls/stats/:code", h.GetStats)
 			api.DELETE("/urls/:code", h.DeleteURL)
 			api.GET("/urls/:code/qr", h.GenerateQRCode)
 			api.GET("/clicks/:code", h.GetURLClicks)
-			api.GET("/clicks/stats/:code", h.GetURLClicksStat)
+			api.GET("/clicks/:code/stats", h.GetURLClicksStat)
 		}
 
 		auth := v1.Group("/auth")

@@ -43,7 +43,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_repository.Dashboard"
+                            "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_dtos.DashboardResponse"
                         }
                     },
                     "401": {
@@ -87,7 +87,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.LoginRequest"
+                            "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_dtos.LoginRequest"
                         }
                     }
                 ],
@@ -95,7 +95,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.LoginResponse"
+                            "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_dtos.LoginResponse"
                         }
                     },
                     "400": {
@@ -147,7 +147,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.UserResponse"
+                            "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_dtos.UserResponse"
                         }
                     },
                     "401": {
@@ -200,7 +200,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.RefreshRequest"
+                            "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_dtos.RefreshRequest"
                         }
                     }
                 ],
@@ -208,7 +208,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.RefreshResponse"
+                            "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_dtos.RefreshResponse"
                         }
                     },
                     "400": {
@@ -261,7 +261,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.RegisterRequest"
+                            "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_dtos.RegisterRequest"
                         }
                     }
                 ],
@@ -269,7 +269,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.RegisterResponse"
+                            "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_dtos.RegisterResponse"
                         }
                     },
                     "400": {
@@ -283,6 +283,138 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Email already in use",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/clicks/{code}/": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a list of individual click events for a specific short code, including IP, User-Agent, and Referer.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "clicks"
+                ],
+                "summary": "List raw click logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Short URL Code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Number of records to return (default 10)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_dtos.ClickResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid limit parameter",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "URL not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/clicks/{code}/stats": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns aggregated daily click counts for a specific short code. Ideal for rendering analytics charts.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "clicks"
+                ],
+                "summary": "Get time-series click statistics",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Short URL Code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_dtos.ClickStatsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "URL not found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -316,13 +448,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.PingResponse"
+                            "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_dtos.PingResponse"
                         }
                     }
                 }
             }
         },
-        "/shorten": {
+        "/urls/shorten": {
             "post": {
                 "security": [
                     {
@@ -347,7 +479,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.ShortenRequest"
+                            "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_dtos.ShortenRequest"
                         }
                     }
                 ],
@@ -355,7 +487,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.ShortenResponse"
+                            "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_dtos.ShortenResponse"
                         },
                         "headers": {
                             "X-RateLimit-Limit": {
@@ -398,7 +530,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/stats/{code}": {
+        "/urls/stats/{code}": {
             "get": {
                 "security": [
                     {
@@ -426,7 +558,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_repository.URLStats"
+                            "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_dtos.URLStatsResponse"
                         }
                     },
                     "401": {
@@ -526,77 +658,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/urls/{code}/clicks": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns a list of individual click events for a specific short code, including IP, User-Agent, and Referer.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "urls"
-                ],
-                "summary": "List raw click logs",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Short URL Code",
-                        "name": "code",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "default": 10,
-                        "description": "Number of records to return (default 10)",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_repository.Click"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid limit parameter",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "URL not found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
         "/urls/{code}/qr": {
             "get": {
                 "description": "Generates a PNG QR code for a given short code. Supports direct viewing or forced download.",
@@ -627,67 +688,6 @@ const docTemplate = `{
                         "description": "QR Code image in PNG format",
                         "schema": {
                             "type": "file"
-                        }
-                    },
-                    "404": {
-                        "description": "URL not found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/urls/{code}/stats": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns aggregated daily click counts for a specific short code. Ideal for rendering analytics charts.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "urls"
-                ],
-                "summary": "Get time-series click statistics",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Short URL Code",
-                        "name": "code",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_handlers.ClickStatsResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
                         }
                     },
                     "404": {
@@ -775,116 +775,121 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "github_com_sulavmhrzn_choto_internal_repository.Click": {
+        "github_com_sulavmhrzn_choto_internal_dtos.ClickResponse": {
             "type": "object",
             "properties": {
                 "clicked_at": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "2026-01-19T11:20:00Z"
                 },
                 "country_code": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "NP"
                 },
                 "device_type": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "Desktop"
                 },
                 "ip_address": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "103.10.24.1"
                 },
                 "is_bot": {
-                    "type": "boolean"
+                    "type": "boolean",
+                    "example": false
                 },
                 "referrer": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "https://twitter.com/"
                 },
                 "url_id": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 45
                 },
                 "user_agent": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)..."
                 }
             }
         },
-        "github_com_sulavmhrzn_choto_internal_repository.ClickStat": {
+        "github_com_sulavmhrzn_choto_internal_dtos.ClickStatDTO": {
             "type": "object",
             "properties": {
                 "bot_clicks": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 12
                 },
                 "by_country": {
                     "type": "object",
                     "additionalProperties": {
                         "type": "integer"
+                    },
+                    "example": {
+                        "IN": 50,
+                        "NP": 800,
+                        "US": 150
                     }
                 },
                 "by_device": {
                     "type": "object",
                     "additionalProperties": {
                         "type": "integer"
+                    },
+                    "example": {
+                        "Desktop": 250,
+                        "Mobile": 750
                     }
                 },
                 "top_country": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "Nepal"
                 },
                 "top_device": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "Mobile"
                 },
                 "total_clicks": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 1000
                 }
             }
         },
-        "github_com_sulavmhrzn_choto_internal_repository.Dashboard": {
+        "github_com_sulavmhrzn_choto_internal_dtos.ClickStatsResponse": {
+            "type": "object",
+            "properties": {
+                "short_code": {
+                    "type": "string",
+                    "example": "choto-api"
+                },
+                "stats": {
+                    "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_dtos.ClickStatDTO"
+                }
+            }
+        },
+        "github_com_sulavmhrzn_choto_internal_dtos.DashboardResponse": {
             "type": "object",
             "properties": {
                 "active_links": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 10
                 },
                 "recent_links": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_repository.URLStats"
+                        "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_dtos.URLStatsResponse"
                     }
                 },
                 "total_clicks": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 450
                 },
                 "total_links": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 12
                 }
             }
         },
-        "github_com_sulavmhrzn_choto_internal_repository.URLStats": {
-            "type": "object",
-            "properties": {
-                "clicks": {
-                    "type": "integer"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "expires_at": {
-                    "type": "string"
-                },
-                "long_url": {
-                    "type": "string"
-                },
-                "short_code": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_handlers.ClickStatsResponse": {
-            "type": "object",
-            "properties": {
-                "short_code": {
-                    "type": "string"
-                },
-                "stats": {
-                    "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_repository.ClickStat"
-                }
-            }
-        },
-        "internal_handlers.LoginRequest": {
+        "github_com_sulavmhrzn_choto_internal_dtos.LoginRequest": {
             "type": "object",
             "required": [
                 "email",
@@ -901,7 +906,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handlers.LoginResponse": {
+        "github_com_sulavmhrzn_choto_internal_dtos.LoginResponse": {
             "type": "object",
             "properties": {
                 "access_token": {
@@ -918,7 +923,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handlers.PingResponse": {
+        "github_com_sulavmhrzn_choto_internal_dtos.PingResponse": {
             "type": "object",
             "properties": {
                 "environment": {
@@ -930,7 +935,7 @@ const docTemplate = `{
                     "example": "up"
                 },
                 "system": {
-                    "$ref": "#/definitions/internal_handlers.SystemStats"
+                    "$ref": "#/definitions/github_com_sulavmhrzn_choto_internal_dtos.SystemStats"
                 },
                 "timestamp": {
                     "type": "string",
@@ -946,7 +951,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handlers.RefreshRequest": {
+        "github_com_sulavmhrzn_choto_internal_dtos.RefreshRequest": {
             "type": "object",
             "required": [
                 "refresh_token"
@@ -958,7 +963,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handlers.RefreshResponse": {
+        "github_com_sulavmhrzn_choto_internal_dtos.RefreshResponse": {
             "type": "object",
             "properties": {
                 "access_token": {
@@ -967,7 +972,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handlers.RegisterRequest": {
+        "github_com_sulavmhrzn_choto_internal_dtos.RegisterRequest": {
             "type": "object",
             "required": [
                 "email",
@@ -985,7 +990,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handlers.RegisterResponse": {
+        "github_com_sulavmhrzn_choto_internal_dtos.RegisterResponse": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -998,7 +1003,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handlers.ShortenRequest": {
+        "github_com_sulavmhrzn_choto_internal_dtos.ShortenRequest": {
             "type": "object",
             "required": [
                 "url"
@@ -1020,7 +1025,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handlers.ShortenResponse": {
+        "github_com_sulavmhrzn_choto_internal_dtos.ShortenResponse": {
             "type": "object",
             "properties": {
                 "clicks": {
@@ -1051,7 +1056,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handlers.SystemStats": {
+        "github_com_sulavmhrzn_choto_internal_dtos.SystemStats": {
             "type": "object",
             "properties": {
                 "goroutines": {
@@ -1064,7 +1069,32 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handlers.UserResponse": {
+        "github_com_sulavmhrzn_choto_internal_dtos.URLStatsResponse": {
+            "type": "object",
+            "properties": {
+                "clicks": {
+                    "type": "integer",
+                    "example": 154
+                },
+                "created_at": {
+                    "type": "string",
+                    "example": "2026-01-14T15:04:05Z"
+                },
+                "expires_at": {
+                    "type": "string",
+                    "example": "2026-02-14T15:04:05Z"
+                },
+                "long_url": {
+                    "type": "string",
+                    "example": "https://github.com/sulavmhrzn/choto"
+                },
+                "short_code": {
+                    "type": "string",
+                    "example": "choto-git"
+                }
+            }
+        },
+        "github_com_sulavmhrzn_choto_internal_dtos.UserResponse": {
             "type": "object",
             "properties": {
                 "created_at": {

@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/sulavmhrzn/choto/internal/config"
+	"github.com/sulavmhrzn/choto/internal/models"
 	"github.com/sulavmhrzn/choto/internal/repository"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -31,19 +32,19 @@ type Token struct {
 	RefreshToken string
 }
 type Authenticator interface {
-	CreateUser(ctx context.Context, email string, password string) (*repository.User, error)
+	CreateUser(ctx context.Context, email string, password string) (*models.User, error)
 	Login(ctx context.Context, email string, passwordHash string) (*Token, error)
 	Refresh(ctx context.Context, oldRefreshToken string) (string, error)
 	VerifyAccessToken(tokenString string) (jwt.MapClaims, error)
-	GetUserByID(ctx context.Context, id int64) (*repository.User, error)
-	GetUserDashboard(ctx context.Context, userID int64) (*repository.Dashboard, error)
+	GetUserByID(ctx context.Context, id int64) (*models.User, error)
+	GetUserDashboard(ctx context.Context, userID int64) (*models.Dashboard, error)
 }
 
 type UserRepository interface {
-	Create(ctx context.Context, email string, passwordHash string) (*repository.User, error)
-	GetByEmail(ctx context.Context, email string) (*repository.User, error)
-	GetByID(ctx context.Context, id int64) (*repository.User, error)
-	GetDashboard(ctx context.Context, userID int64) (*repository.Dashboard, error)
+	Create(ctx context.Context, email string, passwordHash string) (*models.User, error)
+	GetByEmail(ctx context.Context, email string) (*models.User, error)
+	GetByID(ctx context.Context, id int64) (*models.User, error)
+	GetDashboard(ctx context.Context, userID int64) (*models.Dashboard, error)
 }
 
 type UserService struct {
@@ -103,7 +104,7 @@ func (s *UserService) VerifyAccessToken(tokenString string) (jwt.MapClaims, erro
 	return nil, ErrInvalidToken
 }
 
-func (s *UserService) CreateUser(ctx context.Context, email string, password string) (*repository.User, error) {
+func (s *UserService) CreateUser(ctx context.Context, email string, password string) (*models.User, error) {
 	cleanEmail := strings.ToLower(strings.TrimSpace(email))
 	hashedPassword, err := s.hashPassword(password)
 	if err != nil {
@@ -153,7 +154,7 @@ func (s *UserService) Refresh(ctx context.Context, oldRefreshToken string) (stri
 	return s.generateAccessToken(userID)
 }
 
-func (s *UserService) GetUserByID(ctx context.Context, id int64) (*repository.User, error) {
+func (s *UserService) GetUserByID(ctx context.Context, id int64) (*models.User, error) {
 	user, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNoRows) {
@@ -164,7 +165,7 @@ func (s *UserService) GetUserByID(ctx context.Context, id int64) (*repository.Us
 	return user, nil
 }
 
-func (s *UserService) GetUserDashboard(ctx context.Context, userID int64) (*repository.Dashboard, error) {
+func (s *UserService) GetUserDashboard(ctx context.Context, userID int64) (*models.Dashboard, error) {
 	data, err := s.repo.GetDashboard(ctx, userID)
 	if err != nil {
 		return nil, err

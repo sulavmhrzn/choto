@@ -3,44 +3,11 @@ package handlers
 import (
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	_ "github.com/sulavmhrzn/choto/internal/repository" // Ensure this is here
+	"github.com/sulavmhrzn/choto/internal/dtos"
 	"github.com/sulavmhrzn/choto/internal/service"
 )
-
-type RegisterRequest struct {
-	Email    string `json:"email" binding:"required,email" example:"user@example.com"`
-	Password string `json:"password" binding:"required,min=8" example:"strongpassword123"`
-}
-
-type RegisterResponse struct {
-	Email     string    `json:"email" example:"user@example.com"`
-	CreatedAt time.Time `json:"created_at" example:"2026-01-14T14:21:25Z"`
-}
-type LoginRequest struct {
-	Email    string `json:"email" binding:"required,email" example:"user@example.com"`
-	Password string `json:"password" binding:"required" example:"yourpassword123"`
-}
-
-type LoginResponse struct {
-	AccessToken  string `json:"access_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`
-	RefreshToken string `json:"refresh_token" example:"def789..."`
-	TokenType    string `json:"token_type" example:"Bearer"`
-}
-type RefreshRequest struct {
-	RefreshToken string `json:"refresh_token" binding:"required" example:"def789..."`
-}
-
-type RefreshResponse struct {
-	AccessToken string `json:"access_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`
-}
-type UserResponse struct {
-	ID        int64     `json:"id" example:"1"`
-	Email     string    `json:"email" example:"user@example.com"`
-	CreatedAt time.Time `json:"created_at" example:"2026-01-14T14:21:25Z"`
-}
 
 // Register godoc
 // @Summary      Register a new user
@@ -48,14 +15,14 @@ type UserResponse struct {
 // @Tags         auth
 // @Accept       json
 // @Produce      json
-// @Param        request  body      RegisterRequest  true  "Registration Details"
-// @Success      201      {object}  RegisterResponse
+// @Param        request  body      dtos.RegisterRequest  true  "Registration Details"
+// @Success      201      {object}  dtos.RegisterResponse
 // @Failure      400      {object}  map[string]string "Invalid input (e.g. invalid email or short password)"
 // @Failure      409      {object}  map[string]string "Email already in use"
 // @Failure      500      {object}  map[string]string "Internal server error"
 // @Router       /auth/register [post]
 func (h *Handler) Register(c *gin.Context) {
-	var req RegisterRequest
+	var req dtos.RegisterRequest
 
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -71,7 +38,7 @@ func (h *Handler) Register(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
-	c.JSON(http.StatusCreated, RegisterResponse{
+	c.JSON(http.StatusCreated, dtos.RegisterResponse{
 		Email:     user.Email,
 		CreatedAt: user.CreatedAt,
 	})
@@ -83,14 +50,14 @@ func (h *Handler) Register(c *gin.Context) {
 // @Tags         auth
 // @Accept       json
 // @Produce      json
-// @Param        request  body      LoginRequest  true  "Login Credentials"
-// @Success      200      {object}  LoginResponse
+// @Param        request  body      dtos.LoginRequest  true  "Login Credentials"
+// @Success      200      {object}  dtos.LoginResponse
 // @Failure      400      {object}  map[string]string "Invalid request body"
 // @Failure      401      {object}  map[string]string "Invalid credentials"
 // @Failure      500      {object}  map[string]string "Internal server error"
 // @Router       /auth/login [post]
 func (h *Handler) Login(c *gin.Context) {
-	var req LoginRequest
+	var req dtos.LoginRequest
 
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -106,7 +73,7 @@ func (h *Handler) Login(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
-	c.JSON(http.StatusOK, LoginResponse{
+	c.JSON(http.StatusOK, dtos.LoginResponse{
 		AccessToken:  token.AccessToken,
 		RefreshToken: token.RefreshToken,
 		TokenType:    "Bearer",
@@ -119,16 +86,14 @@ func (h *Handler) Login(c *gin.Context) {
 // @Tags         auth
 // @Accept       json
 // @Produce      json
-// @Param        request  body      RefreshRequest  true  "Refresh Token"
-// @Success      200      {object}  RefreshResponse
+// @Param        request  body      dtos.RefreshRequest  true  "Refresh Token"
+// @Success      200      {object}  dtos.RefreshResponse
 // @Failure      400      {object}  map[string]string "Invalid request body"
 // @Failure      401      {object}  map[string]string "Refresh token expired"
 // @Failure      500      {object}  map[string]string "Internal server error"
 // @Router       /auth/refresh [post]
 func (h *Handler) Refresh(c *gin.Context) {
-	var req struct {
-		RefreshToken string `json:"refresh_token" binding:"required"`
-	}
+	var req dtos.RefreshRequest
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -143,7 +108,7 @@ func (h *Handler) Refresh(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"access_token": newAccessToken})
+	c.JSON(http.StatusOK, dtos.RefreshResponse{AccessToken: newAccessToken})
 }
 
 // GetMe godoc
@@ -152,7 +117,7 @@ func (h *Handler) Refresh(c *gin.Context) {
 // @Tags         auth
 // @Produce      json
 // @Security     BearerAuth
-// @Success      200  {object}  UserResponse
+// @Success      200  {object}  dtos.UserResponse
 // @Failure      401  {object}  map[string]string "Unauthorized - Missing or invalid token"
 // @Failure      404  {object}  map[string]string "User not found"
 // @Failure      500  {object}  map[string]string "Internal server error"
@@ -175,7 +140,7 @@ func (h *Handler) GetMe(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"id": user.ID, "email": user.Email, "created_at": user.CreatedAt})
+	c.JSON(http.StatusOK, dtos.UserResponse{ID: user.ID, Email: user.Email, CreatedAt: user.CreatedAt})
 }
 
 // GetDashboard godoc
@@ -184,7 +149,7 @@ func (h *Handler) GetMe(c *gin.Context) {
 // @Tags         auth
 // @Produce      json
 // @Security     BearerAuth
-// @Success      200  {object}  repository.Dashboard
+// @Success      200  {object}  dtos.DashboardResponse
 // @Failure      401  {object}  map[string]string "Unauthorized"
 // @Failure      500  {object}  map[string]string "Internal server error"
 // @Router       /auth/dashboard [get]

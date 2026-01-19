@@ -11,6 +11,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 	"github.com/sulavmhrzn/choto/internal/config"
+	"github.com/sulavmhrzn/choto/internal/models"
 	"github.com/sulavmhrzn/choto/internal/pkg/encoder"
 )
 
@@ -28,46 +29,8 @@ func NewURLRepository(db *sql.DB, rdb *redis.Client, cfg *config.Config) *URLRep
 	}
 }
 
-type URL struct {
-	ID        int64      `json:"id"`
-	LongURL   string     `json:"long_url"`
-	ShortCode string     `json:"short_code"`
-	UserID    int64      `json:"user_id"`
-	Clicks    int        `json:"clicks"`
-	CreatedAt time.Time  `json:"created_at"`
-	ExpiresAt *time.Time `json:"expires_at,omitempty"`
-}
-
-type URLStats struct {
-	LongURL   string     `json:"long_url"`
-	ShortCode string     `json:"short_code"`
-	Clicks    int        `json:"clicks"`
-	CreatedAt time.Time  `json:"created_at"`
-	ExpiresAt *time.Time `json:"expires_at"`
-}
-
-type Click struct {
-	URLID       int64     `json:"url_id"`
-	IpAddress   string    `json:"ip_address"`
-	CountryCode string    `json:"country_code"`
-	UserAgent   string    `json:"user_agent"`
-	DeviceType  string    `json:"device_type"`
-	Referrer    string    `json:"referrer"`
-	IsBot       bool      `json:"is_bot"`
-	ClickedAt   time.Time `json:"clicked_at"`
-}
-
-type ClickStat struct {
-	TotalClicks int64          `json:"total_clicks"`
-	BotClicks   int64          `json:"bot_clicks"`
-	TopCountry  string         `json:"top_country"`
-	TopDevice   string         `json:"top_device"`
-	ByDevice    map[string]int `json:"by_device"`
-	ByCountry   map[string]int `json:"by_country"`
-}
-
-func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*URL, error) {
-	var url URL
+func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*models.URL, error) {
+	var url models.URL
 	var id uint64
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -140,16 +103,16 @@ func (r *URLRepository) Create(ctx context.Context, longURL string, expiresAt *t
 	return &url, nil
 }
 
-func (r *URLRepository) GetByCode(ctx context.Context, code string) (*URL, error) {
+func (r *URLRepository) GetByCode(ctx context.Context, code string) (*models.URL, error) {
 	val, err := r.rdb.Get(ctx, code).Result()
 	if err == nil {
-		var cachedURL URL
+		var cachedURL models.URL
 		if err := json.Unmarshal([]byte(val), &cachedURL); err == nil {
 			return &cachedURL, nil
 		}
 	}
 
-	var url URL
+	var url models.URL
 	query := `SELECT id, long_url, short_code, expires_at, user_id FROM urls WHERE short_code = $1`
 	err = r.db.QueryRowContext(ctx, query, code).Scan(&url.ID, &url.LongURL, &url.ShortCode, &url.ExpiresAt, &url.UserID)
 	if err != nil {
@@ -185,13 +148,13 @@ func (r *URLRepository) IncrementClick(code string) error {
 	return err
 }
 
-func (r *URLRepository) GetStats(ctx context.Context, code string, userID int64) (*URLStats, error) {
+func (r *URLRepository) GetStats(ctx context.Context, code string, userID int64) (*models.URLStats, error) {
 	query := `SELECT urls.long_url, urls.short_code, urls.clicks, urls.created_at, urls.expires_at
 	FROM urls
 	WHERE short_code = $1 AND urls.user_id = $2
 	`
 
-	var stats URLStats
+	var stats models.URLStats
 	var expiresAt *time.Time
 	err := r.db.QueryRowContext(ctx, query, code, userID).Scan(
 		&stats.LongURL,
@@ -238,7 +201,7 @@ func (r *URLRepository) DeleteByID(ctx context.Context, code string, userID int6
 	return nil
 }
 
-func (r *URLRepository) RecordClicks(click Click) error {
+func (r *URLRepository) RecordClicks(click models.Click) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	query := `INSERT INTO clicks 
@@ -250,7 +213,7 @@ func (r *URLRepository) RecordClicks(click Click) error {
 	return err
 }
 
-func (r *URLRepository) ListClicks(ctx context.Context, urlID, limit int64) ([]*Click, error) {
+func (r *URLRepository) ListClicks(ctx context.Context, urlID, limit int64) ([]*models.Click, error) {
 	query := `
 	SELECT 
 		url_id,
@@ -266,7 +229,7 @@ func (r *URLRepository) ListClicks(ctx context.Context, urlID, limit int64) ([]*
 	ORDER BY clicked_at DESC
 	LIMIT $2
 	`
-	clicks := []*Click{}
+	clicks := []*models.Click{}
 	rows, err := r.db.QueryContext(ctx, query, urlID, limit)
 	if err != nil {
 		return nil, err
@@ -274,7 +237,7 @@ func (r *URLRepository) ListClicks(ctx context.Context, urlID, limit int64) ([]*
 	defer rows.Close()
 
 	for rows.Next() {
-		var click Click
+		var click models.Click
 		err := rows.Scan(
 			&click.URLID,
 			&click.ClickedAt,
@@ -296,8 +259,8 @@ func (r *URLRepository) ListClicks(ctx context.Context, urlID, limit int64) ([]*
 	return clicks, nil
 }
 
-func (r *URLRepository) GetClickStats(ctx context.Context, urlID int64) (*ClickStat, error) {
-	var stats ClickStat
+func (r *URLRepository) GetClickStats(ctx context.Context, urlID int64) (*models.ClickStat, error) {
+	var stats models.ClickStat
 	var topCountry, topDevice sql.NullString
 	var countryData, deviceData []byte
 

@@ -15,6 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	qrcode "github.com/skip2/go-qrcode"
 	"github.com/sulavmhrzn/choto/internal/config"
+	"github.com/sulavmhrzn/choto/internal/models"
 	"github.com/sulavmhrzn/choto/internal/repository"
 )
 
@@ -42,28 +43,28 @@ var ValidSchemes = map[string]struct{}{
 }
 
 type Shortener interface {
-	Shorten(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*repository.URL, error)
+	Shorten(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*models.URL, error)
 	GetOriginalURL(ctx context.Context, code string) (string, error)
-	GetStats(ctx context.Context, code string, userID int64) (*repository.URLStats, error)
+	GetStats(ctx context.Context, code string, userID int64) (*models.URLStats, error)
 	DeprecatedTrackClick(code string)
 	StartCleanupWorker(ctx context.Context, interval time.Duration)
 	DeleteURL(ctx context.Context, code string, userID int64) error
 	RecordClick(ctx context.Context, short_code, ip_address, user_agent, referrer string) error
-	ListURLClicks(ctx context.Context, code string, userID, limit int64) ([]*repository.Click, error)
-	GetClickStats(ctx context.Context, code string, userID int64) (*repository.ClickStat, error)
+	ListURLClicks(ctx context.Context, code string, userID, limit int64) ([]*models.Click, error)
+	GetClickStats(ctx context.Context, code string, userID int64) (*models.ClickStat, error)
 	GenerateQRCode(ctx context.Context, code string) ([]byte, error)
 }
 
 type URLRepository interface {
-	Create(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*repository.URL, error)
-	GetByCode(ctx context.Context, code string) (*repository.URL, error)
+	Create(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*models.URL, error)
+	GetByCode(ctx context.Context, code string) (*models.URL, error)
 	IncrementClick(code string) error
-	GetStats(ctx context.Context, code string, userID int64) (*repository.URLStats, error)
+	GetStats(ctx context.Context, code string, userID int64) (*models.URLStats, error)
 	DeleteExpired(ctx context.Context) (int64, error)
 	DeleteByID(ctx context.Context, code string, userID int64) error
-	RecordClicks(click repository.Click) error
-	ListClicks(ctx context.Context, urlID, limit int64) ([]*repository.Click, error)
-	GetClickStats(ctx context.Context, urlID int64) (*repository.ClickStat, error)
+	RecordClicks(click models.Click) error
+	ListClicks(ctx context.Context, urlID, limit int64) ([]*models.Click, error)
+	GetClickStats(ctx context.Context, urlID int64) (*models.ClickStat, error)
 }
 
 type URLService struct {
@@ -131,7 +132,7 @@ func (s *URLService) getCountryCode(ipAddr string) string {
 	return record.RegisteredCountry.ISOCode
 }
 
-func (s *URLService) Shorten(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*repository.URL, error) {
+func (s *URLService) Shorten(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*models.URL, error) {
 	cleanURL := strings.TrimSpace(longURL)
 	u, err := url.ParseRequestURI(cleanURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
@@ -188,7 +189,7 @@ func (s *URLService) DeprecatedTrackClick(code string) {
 	}()
 }
 
-func (s *URLService) GetStats(ctx context.Context, code string, userID int64) (*repository.URLStats, error) {
+func (s *URLService) GetStats(ctx context.Context, code string, userID int64) (*models.URLStats, error) {
 	if code == "" {
 		return nil, ErrShortCodeRequired
 	}
@@ -255,7 +256,7 @@ func (s *URLService) RecordClick(
 	go func() {
 		countryCode := s.getCountryCode(ip_address)
 		deviceType, isBot := s.parseUserAgent(user_agent)
-		err := s.repo.RecordClicks(repository.Click{
+		err := s.repo.RecordClicks(models.Click{
 			URLID:       url.ID,
 			IpAddress:   ip_address,
 			CountryCode: countryCode,
@@ -271,7 +272,7 @@ func (s *URLService) RecordClick(
 	return nil
 }
 
-func (s *URLService) ListURLClicks(ctx context.Context, code string, userID, limit int64) ([]*repository.Click, error) {
+func (s *URLService) ListURLClicks(ctx context.Context, code string, userID, limit int64) ([]*models.Click, error) {
 	url, err := s.repo.GetByCode(ctx, code)
 	if err != nil {
 		if errors.Is(err, repository.ErrNoRows) {
@@ -287,7 +288,7 @@ func (s *URLService) ListURLClicks(ctx context.Context, code string, userID, lim
 	return clicks, err
 }
 
-func (s *URLService) GetClickStats(ctx context.Context, code string, userID int64) (*repository.ClickStat, error) {
+func (s *URLService) GetClickStats(ctx context.Context, code string, userID int64) (*models.ClickStat, error) {
 	url, err := s.repo.GetByCode(ctx, code)
 	if err != nil {
 		if errors.Is(err, repository.ErrNoRows) {

@@ -8,30 +8,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sulavmhrzn/choto/internal/repository"
-	_ "github.com/sulavmhrzn/choto/internal/repository"
+	"github.com/sulavmhrzn/choto/internal/dtos"
 	"github.com/sulavmhrzn/choto/internal/service"
 )
-
-type ShortenRequest struct {
-	URL       string `json:"url" binding:"required,url" example:"https://github.com/sulav/choto"`
-	ExpiresIn int    `json:"expires_in_hours" binding:"omitempty,number,gt=0" example:"24"`
-	Alias     string `json:"alias" binding:"omitempty,alphanum,min=3,max=10" example:"my-link"`
-}
-
-type ShortenResponse struct {
-	ID        int64      `json:"id" example:"101"`
-	ShortCode string     `json:"short_code" example:"my-link"`
-	LongURL   string     `json:"long_url" example:"https://github.com/sulav/choto"`
-	Clicks    int        `json:"clicks" example:"0"`
-	ShortURL  string     `json:"short_url" example:"http://localhost:8080/my-link"`
-	ExpiresAt *time.Time `json:"expires_at"`
-	CreatedAt time.Time  `json:"created_at"`
-}
-type ClickStatsResponse struct {
-	ShortCode string                `json:"short_code"`
-	Stats     *repository.ClickStat `json:"stats"`
-}
 
 // Shorten godoc
 // @Summary      Shorten a URL
@@ -40,16 +19,16 @@ type ClickStatsResponse struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        request body      ShortenRequest  true  "Shorten Request Body"
-// @Success      201     {object}  ShortenResponse
+// @Param        request body      dtos.ShortenRequest  true  "Shorten Request Body"
+// @Success      201     {object}  dtos.ShortenResponse
 // @Header       201     {string}  X-RateLimit-Limit      "Total requests allowed per window"
 // @Header       201     {string}  X-RateLimit-Remaining  "Remaining requests in current window"
 // @Failure      400     {object}  map[string]string "Invalid URL or Alias already taken"
 // @Failure      401     {object}  map[string]string "Unauthorized"
 // @Failure      500     {object}  map[string]string "Internal server error"
-// @Router       /shorten [post]
+// @Router       /urls/shorten [post]
 func (h *Handler) Shorten(c *gin.Context) {
-	var req ShortenRequest
+	var req dtos.ShortenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -81,7 +60,7 @@ func (h *Handler) Shorten(c *gin.Context) {
 		c.Header("X-RateLimit-Limit", strconv.FormatInt(int64(h.Config.RateLimitCount), 10))
 		c.Header("X-RateLimit-Remaining", strconv.FormatInt(int64(h.Config.RateLimitCount)-count, 10))
 	}
-	c.JSON(http.StatusCreated, ShortenResponse{
+	c.JSON(http.StatusCreated, dtos.ShortenResponse{
 		ID:        url.ID,
 		ShortCode: url.ShortCode,
 		LongURL:   url.LongURL,
@@ -132,12 +111,12 @@ func (h *Handler) Redirect(c *gin.Context) {
 // @Produce      json
 // @Security     BearerAuth
 // @Param        code  path      string  true  "Short URL Code"
-// @Success      200   {object}  repository.URLStats
+// @Success      200   {object}  dtos.URLStatsResponse
 // @Failure      401   {object}  map[string]string "Unauthorized"
 // @Failure      404   {object}  map[string]string "Short link not found"
 // @Failure      410   {object}  map[string]string "Short link has expired"
 // @Failure      500   {object}  map[string]string "Internal server error"
-// @Router       /stats/{code} [get]
+// @Router       /urls/stats/{code} [get]
 func (h *Handler) GetStats(c *gin.Context) {
 	code := c.Param("code")
 	userID := c.GetInt64("user_id")
@@ -155,7 +134,13 @@ func (h *Handler) GetStats(c *gin.Context) {
 		}
 		return
 	}
-	c.JSON(http.StatusOK, stats)
+	c.JSON(http.StatusOK, dtos.URLStatsResponse{
+		LongURL:   stats.LongURL,
+		ShortCode: stats.ShortCode,
+		Clicks:    stats.Clicks,
+		CreatedAt: stats.CreatedAt,
+		ExpiresAt: stats.ExpiresAt,
+	})
 }
 
 // DeleteURL godoc
@@ -190,16 +175,16 @@ func (h *Handler) DeleteURL(c *gin.Context) {
 // GetURLClicks godoc
 // @Summary      List raw click logs
 // @Description  Returns a list of individual click events for a specific short code, including IP, User-Agent, and Referer.
-// @Tags         urls
+// @Tags         clicks
 // @Produce      json
 // @Security     BearerAuth
 // @Param        code   path      string  true  "Short URL Code"
 // @Param        limit  query     int     false "Number of records to return (default 10)" default(10)
-// @Success      200    {object}  []repository.Click
+// @Success      200    {object}  []dtos.ClickResponse
 // @Failure      400    {object}  map[string]string "Invalid limit parameter"
 // @Failure      401    {object}  map[string]string "Unauthorized"
 // @Failure      404    {object}  map[string]string "URL not found"
-// @Router       /urls/{code}/clicks [get]
+// @Router       /clicks/{code}/ [get]
 func (h *Handler) GetURLClicks(c *gin.Context) {
 	code := c.Param("code")
 	userID := c.GetInt64("user_id")
@@ -218,23 +203,27 @@ func (h *Handler) GetURLClicks(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
+	var clickResponse []*dtos.ClickResponse
+	for _, click := range clicks {
+		clickResponse = append(clickResponse, dtos.MapClickToDTO(click))
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"clicks": clicks,
+		"clicks": clickResponse,
 	})
 }
 
 // GetURLClicksStat godoc
 // @Summary      Get time-series click statistics
 // @Description  Returns aggregated daily click counts for a specific short code. Ideal for rendering analytics charts.
-// @Tags         urls
+// @Tags         clicks
 // @Produce      json
 // @Security     BearerAuth
 // @Param        code  path      string  true  "Short URL Code"
-// @Success      200   {object}  ClickStatsResponse
+// @Success      200   {object}  dtos.ClickStatsResponse
 // @Failure      401   {object}  map[string]string "Unauthorized"
 // @Failure      404   {object}  map[string]string "URL not found"
 // @Failure      500   {object}  map[string]string "Internal server error"
-// @Router       /urls/{code}/stats [get]
+// @Router       /clicks/{code}/stats [get]
 func (h *Handler) GetURLClicksStat(c *gin.Context) {
 	code := c.Param("code")
 	userID := c.GetInt64("user_id")
@@ -248,9 +237,9 @@ func (h *Handler) GetURLClicksStat(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
-	c.JSON(http.StatusOK, ClickStatsResponse{
+	c.JSON(http.StatusOK, dtos.ClickStatsResponse{
 		ShortCode: code,
-		Stats:     stats,
+		Stats:     dtos.MapClickStatToDTO(*stats),
 	})
 }
 
