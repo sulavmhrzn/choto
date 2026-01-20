@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/lib/pq"
@@ -16,16 +17,18 @@ import (
 )
 
 type URLRepository struct {
-	db  *sql.DB
-	rdb *redis.Client
-	cfg *config.Config
+	db     *sql.DB
+	rdb    *redis.Client
+	cfg    *config.Config
+	logger *slog.Logger
 }
 
-func NewURLRepository(db *sql.DB, rdb *redis.Client, cfg *config.Config) *URLRepository {
+func NewURLRepository(db *sql.DB, rdb *redis.Client, cfg *config.Config, logger *slog.Logger) *URLRepository {
 	return &URLRepository{
-		db:  db,
-		rdb: rdb,
-		cfg: cfg,
+		db:     db,
+		rdb:    rdb,
+		cfg:    cfg,
+		logger: logger,
 	}
 }
 

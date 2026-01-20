@@ -27,7 +27,7 @@ func IsAuthenticated(userService service.Authenticator) gin.HandlerFunc {
 			return
 		}
 		token := parts[1]
-		claims, err := userService.VerifyAccessToken(token)
+		claims, err := userService.VerifyAccessToken(c.Request.Context(), token)
 		if err != nil {
 			log.Printf("error verifying access token: %v", err)
 			switch {

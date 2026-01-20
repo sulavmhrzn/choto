@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -25,19 +26,36 @@ func (h *Handler) Register(c *gin.Context) {
 	var req dtos.RegisterRequest
 
 	if err := c.BindJSON(&req); err != nil {
+		h.Logger.WarnContext(c, "invalid register request body",
+			slog.Any("error", err),
+		)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	user, err := h.Service.UserService.CreateUser(c.Request.Context(), req.Email, req.Password)
+
+	user, err := h.Service.UserService.CreateUser(c, req.Email, req.Password)
 	if err != nil {
-		h.Logger.Error("failed to create user", "err", err)
 		if errors.Is(err, service.ErrEmailAlreadyInUse) {
+			h.Logger.WarnContext(c, "registration failed: email in use",
+				slog.String("email", req.Email),
+			)
 			c.JSON(http.StatusConflict, gin.H{"error": "Email already in use"})
 			return
 		}
+
+		h.Logger.ErrorContext(c, "failed to create user",
+			slog.String("email", req.Email),
+			slog.Any("error", err),
+		)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
+
+	h.Logger.InfoContext(c, "user registered successfully",
+		slog.Int64("user_id", user.ID),
+		slog.String("email", user.Email),
+	)
+
 	c.JSON(http.StatusCreated, dtos.RegisterResponse{
 		Email:     user.Email,
 		CreatedAt: user.CreatedAt,
@@ -60,19 +78,35 @@ func (h *Handler) Login(c *gin.Context) {
 	var req dtos.LoginRequest
 
 	if err := c.BindJSON(&req); err != nil {
+		h.Logger.WarnContext(c, "invalid login request body",
+			slog.Any("error", err),
+		)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	token, err := h.Service.UserService.Login(c.Request.Context(), req.Email, req.Password)
+
+	token, err := h.Service.UserService.Login(c, req.Email, req.Password)
 	if err != nil {
-		h.Logger.Error("failed to login user", "email", req.Email, "err", err)
 		if errors.Is(err, service.ErrInvalidCredentials) {
+			h.Logger.WarnContext(c, "login unauthorized",
+				slog.String("email", req.Email),
+			)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 			return
 		}
+
+		h.Logger.ErrorContext(c, "failed to login user",
+			slog.String("email", req.Email),
+			slog.Any("error", err),
+		)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
+
+	h.Logger.InfoContext(c, "user login successful",
+		slog.String("email", req.Email),
+	)
+
 	c.JSON(http.StatusOK, dtos.LoginResponse{
 		AccessToken:  token.AccessToken,
 		RefreshToken: token.RefreshToken,
@@ -95,19 +129,30 @@ func (h *Handler) Login(c *gin.Context) {
 func (h *Handler) Refresh(c *gin.Context) {
 	var req dtos.RefreshRequest
 	if err := c.BindJSON(&req); err != nil {
+		h.Logger.WarnContext(c, "invalid refresh request body",
+			slog.Any("error", err),
+		)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	newAccessToken, err := h.Service.UserService.Refresh(c.Request.Context(), req.RefreshToken)
+
+	newAccessToken, err := h.Service.UserService.Refresh(c, req.RefreshToken)
 	if err != nil {
-		h.Logger.Error("failed to generate new access token", "err", err)
 		if errors.Is(err, service.ErrRefreshTokenExpired) {
+			h.Logger.WarnContext(c, "refresh attempt failed: token expired")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token expired."})
 			return
 		}
+
+		h.Logger.ErrorContext(c, "failed to generate new access token",
+			slog.Any("error", err),
+		)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
+
+	h.Logger.DebugContext(c, "access token refreshed successfully")
+
 	c.JSON(http.StatusOK, dtos.RefreshResponse{AccessToken: newAccessToken})
 }
 
@@ -125,22 +170,39 @@ func (h *Handler) Refresh(c *gin.Context) {
 func (h *Handler) GetMe(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		h.Logger.Error("user_id not found in context")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-		return
-	}
-	user, err := h.Service.UserService.GetUserByID(c.Request.Context(), userID.(int64))
-	if err != nil {
-		h.Logger.Error("failed to fetch user from database", "userId", userID, "err", err)
-		if errors.Is(err, service.ErrUserNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-			return
-		}
+		h.Logger.ErrorContext(c, "user_id not found in gin context")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
-	c.JSON(http.StatusOK, dtos.UserResponse{ID: user.ID, Email: user.Email, CreatedAt: user.CreatedAt})
+	uid, ok := userID.(int64)
+	if !ok {
+		h.Logger.ErrorContext(c, "invalid user_id type in context", slog.Any("user_id", userID))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	user, err := h.Service.UserService.GetUserByID(c, uid)
+	if err != nil {
+		if errors.Is(err, service.ErrUserNotFound) {
+			h.Logger.WarnContext(c, "user not found", slog.Int64("user_id", uid))
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+			return
+		}
+
+		h.Logger.ErrorContext(c, "failed to fetch user",
+			slog.Int64("user_id", uid),
+			slog.Any("error", err),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, dtos.UserResponse{
+		ID:        user.ID,
+		Email:     user.Email,
+		CreatedAt: user.CreatedAt,
+	})
 }
 
 // GetDashboard godoc
@@ -155,9 +217,15 @@ func (h *Handler) GetMe(c *gin.Context) {
 // @Router       /auth/dashboard [get]
 func (h *Handler) GetDashboard(c *gin.Context) {
 	userID := c.GetInt64("user_id")
-	dashboard, err := h.Service.UserService.GetUserDashboard(c.Request.Context(), userID)
+
+	// Pass 'c' directly to ensure the ContextHandler captures the request_id
+	dashboard, err := h.Service.UserService.GetUserDashboard(c, userID)
 	if err != nil {
-		h.Logger.Error("failed to get dashboard data", "user_id", userID, "err", err)
+		// Log the error with structured context
+		h.Logger.ErrorContext(c, "failed to get dashboard data",
+			slog.Int64("user_id", userID),
+			slog.Any("error", err),
+		)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}

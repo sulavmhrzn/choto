@@ -42,7 +42,7 @@ import (
 // @externalDocs.url          https://github.com/sulavmhrzn/choto#readme
 func main() {
 	startTime := time.Now()
-	logger := slog.New(tint.NewHandler(os.Stdout, nil))
+	logger := slog.New(tint.NewHandler(os.Stdout, &tint.Options{AddSource: true}))
 
 	cfg, err := config.LoadConfig()
 	if err != nil {
