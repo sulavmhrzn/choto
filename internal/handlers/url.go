@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -30,36 +31,55 @@ import (
 func (h *Handler) Shorten(c *gin.Context) {
 	var req dtos.ShortenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		h.Logger.WarnContext(c, "invalid shorten request body", slog.Any("error", err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
 	var expiresAt *time.Time
 	if req.ExpiresIn > 0 {
 		t := time.Now().Add(time.Duration(req.ExpiresIn) * time.Hour)
 		expiresAt = &t
 	}
+
 	userID := c.GetInt64("user_id")
 	url, err := h.Service.URLService.Shorten(c.Request.Context(), req.URL, expiresAt, req.Alias, userID)
+
 	if err != nil {
-		h.Logger.Error("failed to shorten", "user_id", userID, "err", err)
 		switch {
 		case errors.Is(err, service.ErrInvalidScheme):
+			h.Logger.WarnContext(c, "shorten failed: invalid scheme", slog.String("url", req.URL))
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Accepts only http/https schemes"})
 		case errors.Is(err, service.ErrAliasAlreadyTaken):
+			h.Logger.WarnContext(c, "shorten failed: alias taken", slog.String("alias", req.Alias))
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Alias already taken"})
 		case errors.Is(err, service.ErrReservedAlias):
+			h.Logger.WarnContext(c, "shorten failed: reserved alias", slog.String("alias", req.Alias))
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("%q is not allowed as an alias", req.Alias)})
 		default:
+			h.Logger.ErrorContext(c, "failed to shorten URL",
+				slog.Int64("user_id", userID),
+				slog.String("url", req.URL),
+				slog.Any("error", err),
+			)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		}
 		return
 	}
-	val, exists := c.Get("rate_limit_count")
-	if exists {
-		count := val.(int64)
-		c.Header("X-RateLimit-Limit", strconv.FormatInt(int64(h.Config.RateLimitCount), 10))
-		c.Header("X-RateLimit-Remaining", strconv.FormatInt(int64(h.Config.RateLimitCount)-count, 10))
+
+	if val, exists := c.Get("rate_limit_count"); exists {
+		if count, ok := val.(int64); ok {
+			c.Header("X-RateLimit-Limit", strconv.FormatInt(int64(h.Config.RateLimitCount), 10))
+			remaining := int64(h.Config.RateLimitCount) - count
+			c.Header("X-RateLimit-Remaining", strconv.FormatInt(remaining, 10))
+		}
 	}
+
+	h.Logger.InfoContext(c, "url shortened",
+		slog.Int64("user_id", userID),
+		slog.String("short_code", url.ShortCode),
+	)
+
 	c.JSON(http.StatusCreated, dtos.ShortenResponse{
 		ID:        url.ID,
 		ShortCode: url.ShortCode,
@@ -84,23 +104,37 @@ func (h *Handler) Shorten(c *gin.Context) {
 // @Router       /{code} [get]
 func (h *Handler) Redirect(c *gin.Context) {
 	code := c.Param("code")
-	longURL, err := h.Service.URLService.GetOriginalURL(c.Request.Context(), code)
+
+	longURL, err := h.Service.URLService.GetOriginalURL(c, code)
 	if err != nil {
-		h.Logger.Warn("redirect failed", "code", code, "err", err)
 		switch {
 		case errors.Is(err, service.ErrShortCodeRequired):
+			h.Logger.WarnContext(c, "redirect failed: missing code")
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Short code required"})
 		case errors.Is(err, service.ErrURLNotFound):
+			h.Logger.InfoContext(c, "redirect failed: code not found", slog.String("code", code))
 			c.JSON(http.StatusNotFound, gin.H{"error": "Short link not found"})
 		case errors.Is(err, service.ErrShortCodeExpired):
+			h.Logger.WarnContext(c, "redirect failed: expired link", slog.String("code", code))
 			c.JSON(http.StatusGone, gin.H{"error": "Short link has expired"})
 		default:
+			h.Logger.ErrorContext(c, "redirect failed: internal error",
+				slog.String("code", code),
+				slog.Any("error", err),
+			)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		}
 		return
 	}
+
 	h.Service.URLService.DeprecatedTrackClick(code)
-	h.Service.URLService.RecordClick(c.Request.Context(), code, c.ClientIP(), c.Request.UserAgent(), c.Request.Referer())
+	_ = h.Service.URLService.RecordClick(c, code, c.ClientIP(), c.Request.UserAgent(), c.Request.Referer())
+
+	h.Logger.DebugContext(c, "redirecting user",
+		slog.String("code", code),
+		slog.String("target", longURL),
+	)
+
 	c.Redirect(http.StatusFound, longURL)
 }
 
@@ -123,17 +157,35 @@ func (h *Handler) GetStats(c *gin.Context) {
 
 	stats, err := h.Service.URLService.GetStats(c.Request.Context(), code, userID)
 	if err != nil {
-		h.Logger.Warn("stats failed", "code", code, "err", err)
 		switch {
 		case errors.Is(err, service.ErrURLNotFound):
+			h.Logger.InfoContext(c, "stats lookup failed: not found or unauthorized",
+				slog.String("code", code),
+				slog.Int64("user_id", userID),
+			)
 			c.JSON(http.StatusNotFound, gin.H{"error": "Short link not found"})
+
 		case errors.Is(err, service.ErrShortCodeExpired):
+			h.Logger.WarnContext(c, "stats lookup failed: expired",
+				slog.String("code", code),
+			)
 			c.JSON(http.StatusGone, gin.H{"error": "Short link has expired"})
+
 		default:
+			h.Logger.ErrorContext(c, "stats lookup failed: internal error",
+				slog.String("code", code),
+				slog.Any("error", err),
+			)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		}
 		return
 	}
+
+	h.Logger.DebugContext(c, "stats retrieved successfully",
+		slog.String("code", code),
+		slog.Int64("user_id", userID),
+	)
+
 	c.JSON(http.StatusOK, dtos.URLStatsResponse{
 		LongURL:   stats.LongURL,
 		ShortCode: stats.ShortCode,
@@ -161,14 +213,28 @@ func (h *Handler) DeleteURL(c *gin.Context) {
 
 	err := h.Service.URLService.DeleteURL(c.Request.Context(), code, userID)
 	if err != nil {
-		h.Logger.Error("failed to delete url", "code", code, "err", err)
 		if errors.Is(err, service.ErrURLNotFound) {
+			h.Logger.WarnContext(c, "delete failed: not found or unauthorized",
+				slog.String("code", code),
+				slog.Int64("user_id", userID),
+			)
 			c.JSON(http.StatusNotFound, gin.H{"error": "URL not found"})
 			return
 		}
+
+		h.Logger.ErrorContext(c, "delete failed: system error",
+			slog.String("code", code),
+			slog.Any("error", err),
+		)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
+
+	h.Logger.InfoContext(c, "url deleted successfully",
+		slog.String("code", code),
+		slog.Int64("user_id", userID),
+	)
+
 	c.Status(http.StatusNoContent)
 }
 
@@ -188,25 +254,52 @@ func (h *Handler) DeleteURL(c *gin.Context) {
 func (h *Handler) GetURLClicks(c *gin.Context) {
 	code := c.Param("code")
 	userID := c.GetInt64("user_id")
+
 	limit, err := strconv.ParseInt(c.DefaultQuery("limit", "10"), 10, 64)
 	if err != nil {
+		h.Logger.WarnContext(c, "invalid limit parameter",
+			slog.String("limit_raw", c.Query("limit")),
+			slog.Any("error", err),
+		)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be an integer type"})
 		return
 	}
+
+	if limit > 100 {
+		h.Logger.InfoContext(c, "capping high limit request", slog.Int64("original_limit", limit))
+		limit = 100
+	}
+
 	clicks, err := h.Service.URLService.ListURLClicks(c.Request.Context(), code, userID, limit)
 	if err != nil {
-		h.Logger.Error("failed to list url clicks", "code", code, "user_id", userID, "limit", limit, "err", err)
 		if errors.Is(err, service.ErrURLNotFound) {
+			h.Logger.InfoContext(c, "clicks list failed: not found or unauthorized",
+				slog.String("code", code),
+				slog.Int64("user_id", userID),
+			)
 			c.JSON(http.StatusNotFound, gin.H{"error": "URL not found"})
 			return
 		}
+
+		h.Logger.ErrorContext(c, "failed to list url clicks",
+			slog.String("code", code),
+			slog.Int64("user_id", userID),
+			slog.Any("error", err),
+		)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
+
+	h.Logger.DebugContext(c, "successfully retrieved clicks list",
+		slog.String("code", code),
+		slog.Int("count", len(clicks)),
+	)
+
 	var clickResponse []*dtos.ClickResponse
 	for _, click := range clicks {
 		clickResponse = append(clickResponse, dtos.MapClickToDTO(click))
 	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"clicks": clickResponse,
 	})
@@ -227,16 +320,31 @@ func (h *Handler) GetURLClicks(c *gin.Context) {
 func (h *Handler) GetURLClicksStat(c *gin.Context) {
 	code := c.Param("code")
 	userID := c.GetInt64("user_id")
+
 	stats, err := h.Service.URLService.GetClickStats(c.Request.Context(), code, userID)
 	if err != nil {
-		h.Logger.Error("failed to list url clicks", "code", code, "user_id", userID, "err", err)
 		if errors.Is(err, service.ErrURLNotFound) {
+			h.Logger.InfoContext(c, "click stats failed: unauthorized or not found",
+				slog.String("code", code),
+				slog.Int64("user_id", userID),
+			)
 			c.JSON(http.StatusNotFound, gin.H{"error": "URL not found"})
 			return
 		}
+
+		h.Logger.ErrorContext(c, "failed to get click stats",
+			slog.String("code", code),
+			slog.Any("error", err),
+		)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
+
+	h.Logger.DebugContext(c, "click stats retrieved successfully",
+		slog.String("code", code),
+		slog.Int64("total_clicks", stats.TotalClicks),
+	)
+
 	c.JSON(http.StatusOK, dtos.ClickStatsResponse{
 		ShortCode: code,
 		Stats:     dtos.MapClickStatToDTO(*stats),
@@ -256,17 +364,34 @@ func (h *Handler) GetURLClicksStat(c *gin.Context) {
 // @Router       /urls/{code}/qr [get]
 func (h *Handler) GenerateQRCode(c *gin.Context) {
 	code := c.Param("code")
+
 	data, err := h.Service.URLService.GenerateQRCode(c.Request.Context(), code)
 	if err != nil {
 		if errors.Is(err, service.ErrURLNotFound) {
+			h.Logger.InfoContext(c, "qr generation failed: code not found",
+				slog.String("code", code),
+			)
 			c.JSON(http.StatusNotFound, gin.H{"error": "URL not found"})
 			return
 		}
+
+		h.Logger.ErrorContext(c, "failed to generate qr code",
+			slog.String("code", code),
+			slog.Any("error", err),
+		)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
+
 	if c.Query("download") == "true" {
+		h.Logger.DebugContext(c, "user initiated qr code download", slog.String("code", code))
 		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s_qr.png", code))
 	}
+
+	h.Logger.DebugContext(c, "serving qr code image",
+		slog.String("code", code),
+		slog.Int("size_bytes", len(data)),
+	)
+
 	c.Data(http.StatusOK, "image/png", data)
 }
