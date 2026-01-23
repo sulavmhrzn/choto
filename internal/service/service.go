@@ -15,8 +15,11 @@ type Service struct {
 }
 
 func NewService(db *sql.DB, rdb *redis.Client, config *config.Config, logger *slog.Logger) *Service {
+	userRepo := repository.NewUserRepository(db, logger)
+	urlRepo := repository.NewURLRepository(db, rdb, config, logger)
+
 	return &Service{
-		UserService: NewUserService(repository.NewUserRepository(db), config, rdb),
-		URLService:  NewURLService(repository.NewURLRepository(db, rdb, config), rdb, logger, config),
+		UserService: NewUserService(userRepo, config, rdb, logger),
+		URLService:  NewURLService(urlRepo, rdb, logger, config),
 	}
 }
