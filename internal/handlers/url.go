@@ -128,7 +128,7 @@ func (h *Handler) Redirect(c *gin.Context) {
 	}
 
 	h.Service.URLService.DeprecatedTrackClick(code)
-	_ = h.Service.URLService.RecordClick(c, code, c.ClientIP(), c.Request.UserAgent(), c.Request.Referer())
+	h.Service.URLService.RecordClick(c, code, c.ClientIP(), c.Request.UserAgent(), c.Request.Referer())
 
 	h.Logger.DebugContext(c, "redirecting user",
 		slog.String("code", code),
