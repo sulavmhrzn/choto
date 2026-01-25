@@ -100,6 +100,8 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info("Closing database and redis connections...")
+	svc.URLService.StopClickCollector()
+	svc.URLService.WaitClickCollector()
 	cleanupCancel()
 	db.Close()
 	rdb.Close()

@@ -3,6 +3,7 @@ package service
 import (
 	"database/sql"
 	"log/slog"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/sulavmhrzn/choto/internal/config"
@@ -17,9 +18,10 @@ type Service struct {
 func NewService(db *sql.DB, rdb *redis.Client, config *config.Config, logger *slog.Logger) *Service {
 	userRepo := repository.NewUserRepository(db, logger)
 	urlRepo := repository.NewURLRepository(db, rdb, config, logger)
-
+	clickCollector := NewClickCollector(urlRepo, logger, 10, 5*time.Minute)
+	clickCollector.Start()
 	return &Service{
 		UserService: NewUserService(userRepo, config, rdb, logger),
-		URLService:  NewURLService(urlRepo, rdb, logger, config),
+		URLService:  NewURLService(urlRepo, rdb, logger, config, clickCollector),
 	}
 }

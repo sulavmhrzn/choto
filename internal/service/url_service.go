@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mileusna/useragent"
@@ -42,6 +43,40 @@ var ValidSchemes = map[string]struct{}{
 	"https": {},
 }
 
+type ClickCollector struct {
+	ch        chan models.Click
+	repo      URLRepository
+	logger    *slog.Logger
+	batchSize int
+	interval  time.Duration
+	done      chan struct{}
+	wg        sync.WaitGroup
+}
+
+type URLService struct {
+	repo           URLRepository
+	rdb            *redis.Client
+	logger         *slog.Logger
+	config         *config.Config
+	clickCollector *ClickCollector
+}
+
+func NewURLService(
+	repo URLRepository,
+	rdb *redis.Client,
+	logger *slog.Logger,
+	config *config.Config,
+	clickCollector *ClickCollector,
+) Shortener {
+	return &URLService{
+		repo:           repo,
+		rdb:            rdb,
+		logger:         logger,
+		config:         config,
+		clickCollector: clickCollector,
+	}
+}
+
 type Shortener interface {
 	Shorten(ctx context.Context, longURL string, expiresAt *time.Time, alias string, userID int64) (*models.URL, error)
 	GetOriginalURL(ctx context.Context, code string) (string, error)
@@ -53,6 +88,8 @@ type Shortener interface {
 	ListURLClicks(ctx context.Context, code string, userID, limit int64) ([]*models.Click, error)
 	GetClickStats(ctx context.Context, code string, userID int64) (*models.ClickStat, error)
 	GenerateQRCode(ctx context.Context, code string) ([]byte, error)
+	StopClickCollector()
+	WaitClickCollector()
 }
 
 type URLRepository interface {
@@ -65,22 +102,70 @@ type URLRepository interface {
 	RecordClicks(click models.Click) error
 	ListClicks(ctx context.Context, urlID, limit int64) ([]*models.Click, error)
 	GetClickStats(ctx context.Context, urlID int64) (*models.ClickStat, error)
+	RecordClicksBatch(ctx context.Context, clicks []models.Click) error
 }
 
-type URLService struct {
-	repo   URLRepository
-	rdb    *redis.Client
-	logger *slog.Logger
-	config *config.Config
-}
-
-func NewURLService(repo URLRepository, rdb *redis.Client, logger *slog.Logger, config *config.Config) Shortener {
-	return &URLService{
-		repo:   repo,
-		rdb:    rdb,
-		logger: logger,
-		config: config,
+func NewClickCollector(repo URLRepository, logger *slog.Logger, batchSize int, interval time.Duration) *ClickCollector {
+	return &ClickCollector{
+		ch:        make(chan models.Click, 100),
+		repo:      repo,
+		logger:    logger,
+		batchSize: batchSize,
+		interval:  interval,
+		done:      make(chan struct{}),
 	}
+}
+
+func (c *ClickCollector) Start() {
+	c.wg.Add(1)
+	go func() {
+		ctx := context.Background()
+		defer c.wg.Done()
+		c.logger.InfoContext(ctx, "started click collector",
+			slog.Int("batch_size", c.batchSize),
+			slog.Duration("interval", c.interval),
+		)
+		ticker := time.NewTicker(c.interval)
+		defer ticker.Stop()
+
+		var batch []models.Click
+
+		for {
+			select {
+			case click := <-c.ch:
+				batch = append(batch, click)
+				if len(batch) >= c.batchSize {
+					c.flush(batch)
+					batch = nil
+				}
+			case <-ticker.C:
+				if len(batch) > 0 {
+					c.flush(batch)
+					batch = nil
+				}
+			case <-c.done:
+				if len(batch) > 0 {
+					c.flush(batch)
+				}
+				return
+			}
+		}
+	}()
+}
+
+func (c *ClickCollector) flush(batch []models.Click) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	c.logger.InfoContext(ctx, "starting batch flush", "count", len(batch))
+
+	err := c.repo.RecordClicksBatch(ctx, batch)
+	if err != nil {
+		c.logger.ErrorContext(ctx, "batch flush failed", "err", err)
+		return
+	}
+
+	c.logger.InfoContext(ctx, "batch flush successful")
 }
 
 func (s *URLService) IsReserved(alias string) bool {
@@ -323,26 +408,19 @@ func (s *URLService) RecordClick(ctx context.Context, short_code, ip_address, us
 		return err
 	}
 
-	go func() {
-		countryCode := s.getCountryCode(ip_address)
-		deviceType, isBot := s.parseUserAgent(user_agent)
+	countryCode := s.getCountryCode(ip_address)
+	deviceType, isBot := s.parseUserAgent(user_agent)
+	click := models.Click{
+		URLID:       url.ID,
+		IpAddress:   ip_address,
+		CountryCode: countryCode,
+		UserAgent:   user_agent,
+		DeviceType:  deviceType,
+		Referrer:    referrer,
+		IsBot:       isBot,
+	}
+	s.clickCollector.ch <- click
 
-		err := s.repo.RecordClicks(models.Click{
-			URLID:       url.ID,
-			IpAddress:   ip_address,
-			CountryCode: countryCode,
-			UserAgent:   user_agent,
-			DeviceType:  deviceType,
-			Referrer:    referrer,
-			IsBot:       isBot,
-		})
-		if err != nil {
-			s.logger.Error("failed to record click analytics in background",
-				slog.String("code", short_code),
-				slog.Any("error", err),
-			)
-		}
-	}()
 	return nil
 }
 
@@ -405,4 +483,12 @@ func (s *URLService) GenerateQRCode(ctx context.Context, code string) ([]byte, e
 
 	s.logger.DebugContext(ctx, "qr code generated", slog.String("code", code))
 	return png, nil
+}
+
+func (s *URLService) StopClickCollector() {
+	close(s.clickCollector.done)
+}
+
+func (s *URLService) WaitClickCollector() {
+	s.clickCollector.wg.Wait()
 }

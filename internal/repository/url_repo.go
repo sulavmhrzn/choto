@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -465,4 +466,42 @@ func (r *URLRepository) GetClickStats(ctx context.Context, urlID int64) (*models
 		slog.Int64("total", stats.TotalClicks),
 	)
 	return &stats, nil
+}
+
+func (r *URLRepository) RecordClicksBatch(ctx context.Context, clicks []models.Click) error {
+	if len(clicks) == 0 {
+		return nil
+	}
+
+	query := "INSERT INTO clicks (url_id, ip_address, user_agent, country_code, device_type, clicked_at, referrer) VALUES "
+
+	values := []any{}
+	placeholders := []string{}
+
+	for i, click := range clicks {
+		offset := i * 7
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d)",
+			offset+1,
+			offset+2,
+			offset+3,
+			offset+4,
+			offset+5,
+			offset+6,
+			offset+7,
+		))
+		values = append(values,
+			click.URLID,
+			click.IpAddress,
+			click.UserAgent,
+			click.CountryCode,
+			click.DeviceType,
+			click.ClickedAt,
+			click.Referrer,
+		)
+	}
+
+	query += strings.Join(placeholders, ",")
+
+	_, err := r.db.ExecContext(ctx, query, values...)
+	return err
 }
